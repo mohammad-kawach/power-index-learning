@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+
+# Project outputs
+data/*.csv
+models/*.npz
+models/*.pkl
+results/*.png
+results/*.csv
+results/*.txt
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
