@@ -1,4 +1,3 @@
-````markdown
 # InfluenceNet Mini — From-Scratch Banzhaf Prediction
 
 This project is a small **2D from-scratch prototype inspired by InfluenceNet**.
