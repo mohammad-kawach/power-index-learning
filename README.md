@@ -298,12 +298,3 @@ Possible extensions:
 * package the project as an educational open-source toolkit
 
 ---
-
-## Status
-
-This version is suitable for a midterm presentation.
-
-It demonstrates the core idea of learning power indices from data using from-scratch machine learning models.
-
-```
-```
