@@ -1,4 +1,12 @@
 import os
+import tempfile
+
+# Matplotlib may try to write under ~/.config, which is not always writable.
+if "MPLCONFIGDIR" not in os.environ:
+    matplotlib_cache_dir = os.path.join(tempfile.gettempdir(), "matplotlib-cache")
+    os.makedirs(matplotlib_cache_dir, exist_ok=True)
+    os.environ["MPLCONFIGDIR"] = matplotlib_cache_dir
+
 import numpy as np
 import matplotlib.pyplot as plt
 

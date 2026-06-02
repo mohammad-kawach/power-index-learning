@@ -44,7 +44,7 @@ In this project, each game is represented as a tabular feature vector:
 
 ```text
 weights + quota + engineered features
-````
+```
 
 The full InfluenceNet-style extension with **3D rule-based game representations / Marginal Contribution Networks** is planned as future work.
 
@@ -162,6 +162,12 @@ This creates:
 data/midterm_2d_data.csv
 ```
 
+You can also control the dataset size and seed:
+
+```bash
+python3 generate_data.py --num-games 20000 --seed 42
+```
+
 ---
 
 ### 2. Train the models
@@ -196,6 +202,14 @@ It also saves metrics and plots in:
 results/
 ```
 
+Useful saved files include:
+
+```text
+results/model_metrics_2d.csv
+results/mlp_training_history.csv
+results/mlp_training_curve_2d.png
+```
+
 ---
 
 ### 3. Run one example prediction
@@ -218,9 +232,17 @@ The script prints:
 * random forest prediction
 * extra trees prediction
 
-It also saves a comparison chart:
+You can also test a custom voting game:
+
+```bash
+python3 predict.py --weights 4 2 7 1 5 --quota 10
+```
+
+It also saves prediction artifacts:
 
 ```text
+results/example_prediction_table.csv
+results/example_prediction_errors.csv
 results/midterm_comparison.png
 ```
 
