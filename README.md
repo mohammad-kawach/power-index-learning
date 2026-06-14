@@ -74,9 +74,9 @@ On the 2D test dataset, the models achieved approximately:
 
 | Model                      | Test MAE |
 | -------------------------- | -------: |
-| NumPy Neural Network       |   0.0180 |
-| From-Scratch Random Forest |   0.0350 |
-| From-Scratch Extra Trees   |   0.0386 |
+| NumPy Neural Network       |   0.0177 |
+| From-Scratch Random Forest |   0.0352 |
+| From-Scratch Extra Trees   |   0.0389 |
 
 The neural network performs best overall on the full test set.
 
@@ -97,6 +97,75 @@ Agents 1 and 3 have lower power.
 
 ---
 
+## Visual Results
+
+### Neural network training curve
+
+![Neural network training curve](results/mlp_training_curve_2d.png)
+
+This image is created by `train_models.py` and saved as:
+
+```text
+results/mlp_training_curve_2d.png
+```
+
+During training, the NumPy neural network records one row per epoch with:
+
+* training loss
+* test mean absolute error
+
+The plot is generated from `results/mlp_training_history.csv` by `save_loss_curve()` in `src/plots.py`.
+
+The blue line is the neural network training loss.  
+The orange line is the test MAE, which measures the average absolute difference between predicted and exact Banzhaf values on the held-out test set.
+
+Both lines flatten after training, which shows that the model has mostly stabilized. The two values use different scales, so the main point of this image is the trend over time, not a direct comparison between the blue and orange heights.
+
+### Example prediction comparison
+
+![Example prediction comparison](results/midterm_comparison.png)
+
+This image is created by `predict.py` and saved as:
+
+```text
+results/midterm_comparison.png
+```
+
+The example game is:
+
+```python
+example_weights = np.array([4, 2, 7, 1, 5])
+example_quota = 10
+```
+
+The script builds this chart by:
+
+1. calculating the exact Banzhaf values with `exact_banzhaf()`
+2. creating the same engineered feature vector used during training
+3. loading the saved neural network, random forest, and extra trees models from `models/`
+4. predicting one Banzhaf value per agent for each model
+5. writing the table, absolute errors, and chart into `results/`
+
+In the chart, each agent has four bars:
+
+| Bar   | Meaning |
+| ----- | ------- |
+| Real  | exact Banzhaf value from full coalition enumeration |
+| NN    | prediction from the NumPy neural network |
+| RF    | prediction from the from-scratch random forest |
+| Extra | prediction from the from-scratch extra trees model |
+
+Bars that are close together mean the model predicted that agent's power accurately. For this example, all three models recover the main structure: Agent 2 is the most powerful, Agents 0 and 4 are medium-power agents, and Agents 1 and 3 have lower power.
+
+The exact values and predictions are also saved in:
+
+```text
+results/example_prediction_table.csv
+results/example_prediction_errors.csv
+```
+
+---
+
 ## Folder Structure
 
 ```text
@@ -109,6 +178,7 @@ influencenet_from_scratch/
 │   └── extra_trees_scratch.pkl
 ├── results/
 │   ├── mlp_training_curve_2d.png
+│   ├── mlp_training_history.csv
 │   ├── model_metrics_2d.csv
 │   ├── example_prediction_table.csv
 │   ├── example_prediction_errors.csv
