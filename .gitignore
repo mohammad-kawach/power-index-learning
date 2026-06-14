@@ -12,6 +12,8 @@ data/*.csv
 models/*.npz
 models/*.pkl
 results/*.png
+!results/mlp_training_curve_2d.png
+!results/midterm_comparison.png
 results/*.csv
 results/*.txt
 
