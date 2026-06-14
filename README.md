@@ -333,7 +333,7 @@ Agent 4 0.2308 0.2234 0.2501 0.2240
 This shows that all models learned the main power structure of the voting game.
 
 ---
-
+<!--
 ## What to Say in a Presentation
 
 ### Simple explanation
@@ -376,6 +376,7 @@ For better accuracy, increase:
 For faster training, reduce those values.
 
 ---
+-->
 
 ## Future Work
 
