@@ -454,14 +454,35 @@ For faster training, reduce those values.
 
 ## Future Work
 
-Possible extensions:
+Recommended first issue:
 
-* add more agents
+```text
+#6 add more detailed benchmark plots
+```
+
+This is the best next step because it improves the project presentation without changing the core model logic. It can use the files that are already created during training and prediction, such as:
+
+```text
+results/model_metrics_2d.csv
+results/mlp_training_history.csv
+results/example_prediction_table.csv
+results/example_prediction_errors.csv
+```
+
+Good benchmark plots to add first:
+
+* model MAE comparison bar chart
+* predicted vs exact Banzhaf scatter plot
+* per-agent absolute error chart
+* cleaner training loss and test MAE curve
+
+Other possible extensions after that:
+
 * compare with scikit-learn models
-* add Shapley-Shubik index prediction
 * implement Monte Carlo Banzhaf approximation for larger games
+* add Shapley-Shubik index prediction
+* add more agents
 * extend from 2D weighted voting games to 3D rule-based Marginal Contribution Networks
-* add more detailed benchmark plots
 * package the project as an educational open-source toolkit
 
 ---
