@@ -201,20 +201,94 @@ influencenet_from_scratch/
 
 ---
 
-## Setup
+## Setup and Local Installation
 
-Create and activate a virtual environment:
+Follow these steps to clone the project and run it locally from a clean machine.
+
+### 1. Install required software
+
+Make sure these tools are installed first:
+
+| Tool | Why it is needed |
+| ---- | ---------------- |
+| Git | Clones the project from GitHub |
+| Python 3 | Runs the data generation, training, and prediction scripts |
+| pip | Installs Python dependencies |
+| venv | Creates an isolated Python environment |
+
+Recommended versions:
+
+```text
+Python 3.10 or newer
+Git 2.x or newer
+```
+
+Check your installation:
+
+```bash
+git --version
+python3 --version
+python3 -m pip --version
+```
+
+On Windows, your Python command may be `python` instead of `python3`.
+
+### 2. Clone the project
+
+```bash
+git clone https://github.com/mohammad-kawach/power-index-learning.git
+cd power-index-learning
+```
+
+### 3. Create a virtual environment
+
+macOS / Linux:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-Install requirements:
+Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+After activation, your terminal prompt should show `(.venv)`.
+
+### 4. Install dependencies
+
+Upgrade pip:
 
 ```bash
-pip install -r requirements.txt
+python3 -m pip install --upgrade pip
 ```
+
+Install the project dependencies:
+
+```bash
+python3 -m pip install -r requirements.txt
+```
+
+The main dependencies are:
+
+```text
+numpy
+pandas
+matplotlib
+```
+
+### 5. Verify the setup
+
+Run this command to make sure Python can import the required libraries:
+
+```bash
+python3 -c "import numpy, pandas, matplotlib; print('Setup is ready')"
+```
+
+If you are on Windows and `python3` does not work, use `python` instead.
 
 ---
 
