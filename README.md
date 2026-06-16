@@ -461,7 +461,7 @@ Possible extensions:
 * add Shapley-Shubik index prediction
 * implement Monte Carlo Banzhaf approximation for larger games
 * extend from 2D weighted voting games to 3D rule-based Marginal Contribution Networks
-* add more detailed benchmark plots
+* 🔄 Add more detailed benchmark plots **(in progress)**
 * package the project as an educational open-source toolkit
 
 ---
