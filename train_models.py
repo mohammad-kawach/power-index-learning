@@ -10,7 +10,12 @@ from src.features import create_feature_matrix, clean_prediction
 from src.scaler import StandardScalerScratch
 from src.nn import NumpyMLP
 from src.trees import ForestRegressorScratch
-from src.plots import save_loss_curve
+from src.plots import (
+    save_loss_curve,
+    save_model_mae_chart,
+    save_prediction_scatter,
+    save_per_agent_error_chart,
+)
 
 RANDOM_SEED = 42
 DEFAULT_DATASET_PATH = "data/midterm_2d_data.csv"
@@ -118,6 +123,11 @@ def main(args=None):
     mlp_pred = clean_batch(mlp_model.predict(X_test_scaled))
     rf_pred = clean_batch(rf_model.predict(X_test))
     extra_pred = clean_batch(extra_model.predict(X_test))
+    predictions = {
+        "NN": mlp_pred,
+        "RF": rf_pred,
+        "Extra": extra_pred,
+    }
 
     metrics = pd.DataFrame(
         [
@@ -129,11 +139,26 @@ def main(args=None):
     metrics_path = os.path.join(args.results_dir, "model_metrics_2d.csv")
     metrics.to_csv(metrics_path, index=False)
 
+    mae_chart_path = os.path.join(args.results_dir, "model_mae_comparison.png")
+    scatter_path = os.path.join(args.results_dir, "test_prediction_scatter.png")
+    per_agent_error_path = os.path.join(args.results_dir, "per_agent_mae_2d.png")
+    save_model_mae_chart(metrics, mae_chart_path)
+    save_prediction_scatter(y_test, predictions, scatter_path)
+    save_per_agent_error_chart(
+        y_test,
+        predictions,
+        per_agent_error_path,
+        title="Per-Agent Test MAE by Model",
+    )
+
     print("\n--- Final Test Results ---")
     print(f"NN MAE:    {metrics.loc[0, 'test_mae']:.6f}")
     print(f"RF MAE:    {metrics.loc[1, 'test_mae']:.6f}")
     print(f"Extra MAE: {metrics.loc[2, 'test_mae']:.6f}")
     print(f"\nMetrics saved to {metrics_path}")
+    print(f"MAE comparison chart saved to {mae_chart_path}")
+    print(f"Prediction scatter chart saved to {scatter_path}")
+    print(f"Per-agent error chart saved to {per_agent_error_path}")
 
 if __name__ == "__main__":
     main()

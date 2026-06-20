@@ -119,7 +119,25 @@ The plot is generated from `results/mlp_training_history.csv` by `save_loss_curv
 The blue line is the neural network training loss.  
 The orange line is the test MAE, which measures the average absolute difference between predicted and exact Banzhaf values on the held-out test set.
 
-Both lines flatten after training, which shows that the model has mostly stabilized. The two values use different scales, so the main point of this image is the trend over time, not a direct comparison between the blue and orange heights.
+Both lines flatten after training, which shows that the model has mostly stabilized. The plot uses separate y-axes because training loss and test MAE have different scales.
+
+### Detailed benchmark plots
+
+The detailed benchmark plot update is included. After running `train_models.py`, the project creates:
+
+```text
+results/model_mae_comparison.png
+results/test_prediction_scatter.png
+results/per_agent_mae_2d.png
+```
+
+These plots make it easier to compare model performance beyond the raw MAE table:
+
+| Plot | Meaning |
+| ---- | ------- |
+| `model_mae_comparison.png` | bar chart comparing each model's test MAE |
+| `test_prediction_scatter.png` | predicted vs exact Banzhaf values across the test set |
+| `per_agent_mae_2d.png` | average prediction error for each agent and model |
 
 ### Example prediction comparison
 
@@ -157,11 +175,12 @@ In the chart, each agent has four bars:
 
 Bars that are close together mean the model predicted that agent's power accurately. For this example, all three models recover the main structure: Agent 2 is the most powerful, Agents 0 and 4 are medium-power agents, and Agents 1 and 3 have lower power.
 
-The exact values and predictions are also saved in:
+The exact values, prediction errors, and error chart are also saved in:
 
 ```text
 results/example_prediction_table.csv
 results/example_prediction_errors.csv
+results/example_prediction_errors.png
 ```
 
 ---
@@ -180,8 +199,12 @@ influencenet_from_scratch/
 │   ├── mlp_training_curve_2d.png
 │   ├── mlp_training_history.csv
 │   ├── model_metrics_2d.csv
+│   ├── model_mae_comparison.png
+│   ├── test_prediction_scatter.png
+│   ├── per_agent_mae_2d.png
 │   ├── example_prediction_table.csv
 │   ├── example_prediction_errors.csv
+│   ├── example_prediction_errors.png
 │   └── midterm_comparison.png
 ├── src/
 │   ├── __init__.py
@@ -352,6 +375,9 @@ Useful saved files include:
 results/model_metrics_2d.csv
 results/mlp_training_history.csv
 results/mlp_training_curve_2d.png
+results/model_mae_comparison.png
+results/test_prediction_scatter.png
+results/per_agent_mae_2d.png
 ```
 
 ---
@@ -388,6 +414,7 @@ It also saves prediction artifacts:
 results/example_prediction_table.csv
 results/example_prediction_errors.csv
 results/midterm_comparison.png
+results/example_prediction_errors.png
 ```
 
 ---
@@ -454,14 +481,13 @@ For faster training, reduce those values.
 
 ## Future Work
 
-Possible extensions:
+Possible future extensions:
 
-* add more agents
 * compare with scikit-learn models
-* add Shapley-Shubik index prediction
 * implement Monte Carlo Banzhaf approximation for larger games
+* add Shapley-Shubik index prediction
+* add more agents
 * extend from 2D weighted voting games to 3D rule-based Marginal Contribution Networks
-* 🔄 Add more detailed benchmark plots **(in progress)**
 * package the project as an educational open-source toolkit
 
 ---

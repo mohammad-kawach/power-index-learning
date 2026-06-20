@@ -8,7 +8,7 @@ import pandas as pd
 from src.banzhaf import exact_banzhaf, NUM_AGENTS
 from src.features import create_features_for_one_game, clean_prediction
 from src.nn import NumpyMLP
-from src.plots import save_prediction_chart
+from src.plots import save_prediction_chart, save_per_agent_error_chart
 
 DEFAULT_MODELS_DIR = "models"
 DEFAULT_RESULTS_DIR = "results"
@@ -88,16 +88,26 @@ def main(args=None):
     table_path = os.path.join(args.results_dir, "example_prediction_table.csv")
     errors_path = os.path.join(args.results_dir, "example_prediction_errors.csv")
     chart_path = os.path.join(args.results_dir, "midterm_comparison.png")
+    error_chart_path = os.path.join(args.results_dir, "example_prediction_errors.png")
     table.to_csv(table_path, index=False)
     errors.to_csv(errors_path, index=False)
+    predictions = {"NN": mlp_prediction, "RF": rf_prediction, "Extra": extra_prediction}
     save_prediction_chart(
         real_banzhaf,
-        {"NN": mlp_prediction, "RF": rf_prediction, "Extra": extra_prediction},
+        predictions,
         chart_path,
+    )
+    save_per_agent_error_chart(
+        real_banzhaf,
+        predictions,
+        error_chart_path,
+        title="Example Prediction Absolute Error",
+        ylabel="Absolute Error",
     )
     print(f"\nPrediction table saved to {table_path}")
     print(f"Prediction errors saved to {errors_path}")
     print(f"Chart saved to {chart_path}")
+    print(f"Error chart saved to {error_chart_path}")
 
 if __name__ == "__main__":
     main()
