@@ -74,11 +74,13 @@ On the 2D test dataset, the models achieved approximately:
 
 | Model                      | Test MAE |
 | -------------------------- | -------: |
-| NumPy Neural Network       |   0.0177 |
-| From-Scratch Random Forest |   0.0352 |
-| From-Scratch Extra Trees   |   0.0389 |
+| NumPy Neural Network       |   0.0179 |
+| From-Scratch Random Forest |   0.0348 |
+| From-Scratch Extra Trees   |   0.0386 |
 
 The neural network performs best overall on the full test set.
+
+The latest merged version also includes refreshed result images and detailed benchmark plots for model-level MAE, predicted-vs-exact values, per-agent error, and one-game prediction error.
 
 For one example voting game:
 
@@ -123,7 +125,7 @@ Both lines flatten after training, which shows that the model has mostly stabili
 
 ### Detailed benchmark plots
 
-The detailed benchmark plot update is included. After running `train_models.py`, the project creates:
+After the latest merge, `train_models.py` creates the following benchmark plots:
 
 ```text
 results/model_mae_comparison.png
@@ -138,6 +140,24 @@ These plots make it easier to compare model performance beyond the raw MAE table
 | `model_mae_comparison.png` | bar chart comparing each model's test MAE |
 | `test_prediction_scatter.png` | predicted vs exact Banzhaf values across the test set |
 | `per_agent_mae_2d.png` | average prediction error for each agent and model |
+
+#### Model MAE comparison
+
+![Model MAE comparison](results/model_mae_comparison.png)
+
+This chart compares the final test MAE for the NumPy neural network, random forest, and extra trees models. Lower values are better.
+
+#### Predicted vs exact values
+
+![Predicted vs exact Banzhaf values](results/test_prediction_scatter.png)
+
+This scatter plot compares every predicted Banzhaf value against the exact value from the test set. Points closer to the dashed diagonal line are more accurate.
+
+#### Per-agent MAE
+
+![Per-agent MAE by model](results/per_agent_mae_2d.png)
+
+This plot shows whether a model has higher error on specific agent positions instead of only reporting one overall test MAE.
 
 ### Example prediction comparison
 
@@ -182,6 +202,12 @@ results/example_prediction_table.csv
 results/example_prediction_errors.csv
 results/example_prediction_errors.png
 ```
+
+#### Example prediction absolute errors
+
+![Example prediction absolute errors](results/example_prediction_errors.png)
+
+This chart shows the absolute error for each model on each agent in the example voting game.
 
 ---
 
@@ -424,11 +450,11 @@ results/example_prediction_errors.png
 ```text
 --- Midterm Example Prediction ---
   Agent   Real     NN     RF  Extra
-Agent 0 0.2308 0.2784 0.1986 0.2216
-Agent 1 0.0769 0.0715 0.0788 0.1137
-Agent 2 0.3846 0.3708 0.4007 0.3584
-Agent 3 0.0769 0.0559 0.0719 0.0823
-Agent 4 0.2308 0.2234 0.2501 0.2240
+Agent 0 0.2308 0.2019 0.2080 0.2062
+Agent 1 0.0769 0.0969 0.0890 0.1199
+Agent 2 0.3846 0.4221 0.3842 0.3507
+Agent 3 0.0769 0.0621 0.0693 0.0702
+Agent 4 0.2308 0.2171 0.2495 0.2531
 ```
 
 This shows that all models learned the main power structure of the voting game.
