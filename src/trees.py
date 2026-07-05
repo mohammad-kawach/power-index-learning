@@ -110,13 +110,14 @@ class ForestRegressorScratch:
     mode="extra_trees": no bootstrap + random thresholds for more randomness
     """
 
-    def __init__(self, n_estimators=40, max_depth=9, min_samples_split=8, max_features="sqrt", mode="random_forest", seed=42):
+    def __init__(self, n_estimators=40, max_depth=9, min_samples_split=8, max_features="sqrt", mode="random_forest", seed=42, verbose=False):
         self.n_estimators = n_estimators
         self.max_depth = max_depth
         self.min_samples_split = min_samples_split
         self.max_features = max_features
         self.mode = mode
         self.seed = seed
+        self.verbose = verbose
         self.trees = []
 
     def fit(self, X, y):
@@ -146,7 +147,8 @@ class ForestRegressorScratch:
             )
             tree.fit(X_train, y_train)
             self.trees.append(tree)
-            print(f"Trained {self.mode} tree {i + 1}/{self.n_estimators}")
+            if self.verbose:
+                print(f"Trained {self.mode} tree {i + 1}/{self.n_estimators}")
         return self
 
     def predict(self, X):
