@@ -1,3 +1,5 @@
+"""Train from-scratch and scikit-learn power-index predictors."""
+
 import argparse
 import os
 import pickle
@@ -5,160 +7,237 @@ import pickle
 import numpy as np
 import pandas as pd
 
-from src.banzhaf import NUM_AGENTS
-from src.features import create_feature_matrix, clean_prediction 
-from src.scaler import StandardScalerScratch
+from src.features import (
+    clean_prediction,
+    create_feature_matrix,
+    infer_num_agents,
+    target_columns,
+)
 from src.nn import NumpyMLP
-from src.trees import ForestRegressorScratch
 from src.plots import (
     save_loss_curve,
     save_model_mae_chart,
-    save_prediction_scatter,
     save_per_agent_error_chart,
+    save_prediction_scatter,
 )
+from src.scaler import StandardScalerScratch
+from src.trees import ForestRegressorScratch
+
 
 RANDOM_SEED = 42
-DEFAULT_DATASET_PATH = "data/midterm_2d_data.csv"
-DEFAULT_RESULTS_DIR = "results"
-DEFAULT_MODELS_DIR = "models"
 
 
-def mae(pred, y):
-    return float(np.mean(np.abs(pred - y)))
+def mae(prediction, target):
+    return float(np.mean(np.abs(prediction - target)))
 
 
 def clean_batch(predictions):
-    return np.array([clean_prediction(p) for p in predictions])
+    return np.array([clean_prediction(row) for row in predictions])
+
+
+def _save_pickle(value, path):
+    with open(path, "wb") as handle:
+        pickle.dump(value, handle)
+
+
+def _load_sklearn_models(args):
+    try:
+        from sklearn.ensemble import ExtraTreesRegressor, RandomForestRegressor
+        from sklearn.neural_network import MLPRegressor
+    except ImportError as error:
+        raise RuntimeError(
+            "scikit-learn is required for baseline comparisons; run "
+            "'python -m pip install -r requirements.txt'"
+        ) from error
+
+    return {
+        "sklearn MLP": MLPRegressor(
+            hidden_layer_sizes=(128, 64),
+            max_iter=args.sklearn_max_iter,
+            batch_size=args.batch_size,
+            random_state=RANDOM_SEED,
+            early_stopping=True,
+        ),
+        "sklearn Random Forest": RandomForestRegressor(
+            n_estimators=args.n_estimators,
+            max_depth=10,
+            random_state=RANDOM_SEED,
+            n_jobs=-1,
+        ),
+        "sklearn Extra Trees": ExtraTreesRegressor(
+            n_estimators=args.n_estimators,
+            max_depth=11,
+            random_state=RANDOM_SEED + 1,
+            n_jobs=-1,
+        ),
+    }
+
+
+def _train_one_index(index_name, X_train, X_test, y_train, y_test, scaler, args):
+    title = "Banzhaf" if index_name == "banzhaf" else "Shapley--Shubik"
+    print(f"\n=== {title} predictors ===")
+    predictions = {}
+    metric_rows = []
+
+    mlp = NumpyMLP(
+        input_size=X_train.shape[1],
+        hidden1=128,
+        hidden2=64,
+        output_size=y_train.shape[1],
+        learning_rate=0.001,
+        seed=RANDOM_SEED,
+    )
+    history = mlp.train(
+        scaler.transform(X_train),
+        y_train,
+        scaler.transform(X_test),
+        y_test,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        print_every=max(1, args.epochs // 10),
+    )
+    mlp.save(os.path.join(args.models_dir, f"{index_name}_numpy_mlp.npz"), scaler)
+    history_path = os.path.join(args.results_dir, f"{index_name}_numpy_mlp_history.csv")
+    pd.DataFrame(history, columns=["epoch", "train_loss", "test_mae"]).to_csv(
+        history_path, index=False
+    )
+    save_loss_curve(
+        history,
+        os.path.join(args.results_dir, f"{index_name}_numpy_mlp_training.png"),
+        title=f"{title}: NumPy MLP Training",
+    )
+    predictions["Scratch MLP"] = clean_batch(mlp.predict(scaler.transform(X_test)))
+
+    scratch_models = {
+        "Scratch Random Forest": ForestRegressorScratch(
+            n_estimators=args.n_estimators,
+            max_depth=10,
+            mode="random_forest",
+            seed=RANDOM_SEED,
+            verbose=args.verbose,
+        ),
+        "Scratch Extra Trees": ForestRegressorScratch(
+            n_estimators=args.n_estimators,
+            max_depth=11,
+            mode="extra_trees",
+            seed=RANDOM_SEED + 1,
+            verbose=args.verbose,
+        ),
+    }
+    for label, model in scratch_models.items():
+        print(f"Training {label}...")
+        model.fit(X_train, y_train)
+        slug = "random_forest" if "Random" in label else "extra_trees"
+        _save_pickle(model, os.path.join(args.models_dir, f"{index_name}_scratch_{slug}.pkl"))
+        predictions[label] = clean_batch(model.predict(X_test))
+
+    for label, model in _load_sklearn_models(args).items():
+        print(f"Training {label}...")
+        is_mlp = label == "sklearn MLP"
+        train_features = scaler.transform(X_train) if is_mlp else X_train
+        test_features = scaler.transform(X_test) if is_mlp else X_test
+        model.fit(train_features, y_train)
+        slug = label.removeprefix("sklearn ").lower().replace(" ", "_")
+        artifact = {"model": model, "scaled": is_mlp}
+        _save_pickle(artifact, os.path.join(args.models_dir, f"{index_name}_sklearn_{slug}.pkl"))
+        predictions[label] = clean_batch(model.predict(test_features))
+
+    for label, values in predictions.items():
+        metric_rows.append(
+            {
+                "index": title.replace("--", "-"),
+                "implementation": "scikit-learn" if label.startswith("sklearn") else "from scratch",
+                "model": label,
+                "test_mae": mae(values, y_test),
+            }
+        )
+
+    save_prediction_scatter(
+        y_test,
+        predictions,
+        os.path.join(args.results_dir, f"{index_name}_prediction_scatter.png"),
+        title=f"{title}: Predicted vs Exact",
+    )
+    save_per_agent_error_chart(
+        y_test,
+        predictions,
+        os.path.join(args.results_dir, f"{index_name}_per_agent_mae.png"),
+        title=f"{title}: Per-Agent Test MAE",
+    )
+    return metric_rows
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Train from-scratch Banzhaf prediction models.")
-    parser.add_argument("--data", default=DEFAULT_DATASET_PATH, help="Input dataset CSV path.")
-    parser.add_argument("--epochs", type=int, default=1000, help="Neural network training epochs.")
-    parser.add_argument("--batch-size", type=int, default=256, help="Neural network mini-batch size.")
-    parser.add_argument("--n-estimators", type=int, default=40, help="Number of trees for each forest model.")
-    parser.add_argument("--models-dir", default=DEFAULT_MODELS_DIR, help="Directory for saved models.")
-    parser.add_argument("--results-dir", default=DEFAULT_RESULTS_DIR, help="Directory for saved metrics and plots.")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--data", default="data/voting_games.csv")
+    parser.add_argument("--indices", nargs="+", choices=("banzhaf", "shapley"), default=["banzhaf", "shapley"])
+    parser.add_argument("--epochs", type=int, default=300)
+    parser.add_argument("--sklearn-max-iter", type=int, default=300)
+    parser.add_argument("--batch-size", type=int, default=256)
+    parser.add_argument("--n-estimators", type=int, default=40)
+    parser.add_argument("--models-dir", default="models")
+    parser.add_argument("--results-dir", default="results")
+    parser.add_argument("--verbose", action="store_true", help="Print progress for every scratch tree.")
     return parser.parse_args()
 
 
 def main(args=None):
-    if args is None:
-        args = parse_args()
-
+    args = parse_args() if args is None else args
+    for name in ("epochs", "sklearn_max_iter", "batch_size", "n_estimators"):
+        if getattr(args, name) <= 0:
+            raise ValueError(f"--{name.replace('_', '-')} must be positive")
+    # Fail before expensive from-scratch training if the comparison dependency
+    # was not installed.
+    _load_sklearn_models(args)
     os.makedirs(args.models_dir, exist_ok=True)
     os.makedirs(args.results_dir, exist_ok=True)
-
     if not os.path.exists(args.data):
-        print(f"Error: {args.data} not found. Run generate_data.py first.")
-        return
-        
-    df = pd.read_csv(args.data)
-    X = create_feature_matrix(df) 
-    y = df[[f"target_{i}" for i in range(NUM_AGENTS)]].values.astype(float)
+        raise FileNotFoundError(f"{args.data} not found; run generate_data.py first")
+
+    dataframe = pd.read_csv(args.data)
+    if len(dataframe) < 20:
+        raise ValueError("training requires at least 20 generated games")
+    num_agents = infer_num_agents(dataframe)
+    X = create_feature_matrix(dataframe)
+    targets = {}
+    for index_name in args.indices:
+        columns = target_columns(dataframe, index_name)
+        if len(columns) != num_agents:
+            raise ValueError(
+                f"dataset needs {num_agents} {index_name}_target_* columns; regenerate it with generate_data.py"
+            )
+        targets[index_name] = dataframe[columns].values.astype(float)
 
     rng = np.random.default_rng(RANDOM_SEED)
-    indices = rng.permutation(len(X))
-    X, y = X[indices], y[indices]
-
+    permutation = rng.permutation(len(X))
     split = int(0.8 * len(X))
-    X_train, X_test = X[:split], X[split:]
-    y_train, y_test = y[:split], y[split:]
+    train_indices, test_indices = permutation[:split], permutation[split:]
+    X_train, X_test = X[train_indices], X[test_indices]
+    scaler = StandardScalerScratch().fit(X_train)
 
-    scaler = StandardScalerScratch()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
+    rows = []
+    for index_name, y in targets.items():
+        rows.extend(
+            _train_one_index(
+                index_name,
+                X_train,
+                X_test,
+                y[train_indices],
+                y[test_indices],
+                scaler,
+                args,
+            )
+        )
 
-    # --- 1. Neural Network ---
-    print(f"\nTraining NumPy Neural Network ({X_train_scaled.shape[1]} features)")
-    mlp_model = NumpyMLP(
-        input_size=X_train_scaled.shape[1],
-        hidden1=128, hidden2=64, output_size=NUM_AGENTS,
-        learning_rate=0.001, seed=RANDOM_SEED
-    )
-    history = mlp_model.train(
-        X_train_scaled,
-        y_train,
-        X_test_scaled,
-        y_test,
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        print_every=100,
-    )
-    
-    mlp_model.save(os.path.join(args.models_dir, "mlp_numpy_2d.npz"), scaler)
-    save_loss_curve(history, os.path.join(args.results_dir, "mlp_training_curve_2d.png"))
-    pd.DataFrame(history, columns=["epoch", "train_loss", "test_mae"]).to_csv(
-        os.path.join(args.results_dir, "mlp_training_history.csv"),
-        index=False,
-    )
-
-    # --- 2. Random Forest ---
-    print("\nTraining From-Scratch Random Forest...")
-    rf_model = ForestRegressorScratch(
-        n_estimators=args.n_estimators,
-        max_depth=10,
-        mode="random_forest",
-        seed=RANDOM_SEED,
-    )
-    rf_model.fit(X_train, y_train)
-    
-    with open(os.path.join(args.models_dir, "random_forest_scratch.pkl"), "wb") as f:
-        pickle.dump(rf_model, f)
-
-    # --- 3. Extra Trees ---
-    print("Training From-Scratch Extra Trees...")
-    extra_model = ForestRegressorScratch(
-        n_estimators=args.n_estimators,
-        max_depth=11,
-        mode="extra_trees",
-        seed=RANDOM_SEED + 1,
-    )
-    extra_model.fit(X_train, y_train)
-    
-    with open(os.path.join(args.models_dir, "extra_trees_scratch.pkl"), "wb") as f:
-        pickle.dump(extra_model, f)
-
-    # Evaluation
-    mlp_pred = clean_batch(mlp_model.predict(X_test_scaled))
-    rf_pred = clean_batch(rf_model.predict(X_test))
-    extra_pred = clean_batch(extra_model.predict(X_test))
-    predictions = {
-        "NN": mlp_pred,
-        "RF": rf_pred,
-        "Extra": extra_pred,
-    }
-
-    metrics = pd.DataFrame(
-        [
-            {"model": "NumPy Neural Network", "test_mae": mae(mlp_pred, y_test)},
-            {"model": "From-Scratch Random Forest", "test_mae": mae(rf_pred, y_test)},
-            {"model": "From-Scratch Extra Trees", "test_mae": mae(extra_pred, y_test)},
-        ]
-    )
-    metrics_path = os.path.join(args.results_dir, "model_metrics_2d.csv")
+    metrics = pd.DataFrame(rows).sort_values(["index", "test_mae"])
+    metrics_path = os.path.join(args.results_dir, "model_metrics.csv")
     metrics.to_csv(metrics_path, index=False)
+    save_model_mae_chart(metrics, os.path.join(args.results_dir, "model_mae_comparison.png"))
+    print("\n=== Final test MAE ===")
+    print(metrics.to_string(index=False, float_format=lambda value: f"{value:.6f}"))
+    print(f"\nSaved metrics to {metrics_path}")
+    return metrics
 
-    mae_chart_path = os.path.join(args.results_dir, "model_mae_comparison.png")
-    scatter_path = os.path.join(args.results_dir, "test_prediction_scatter.png")
-    per_agent_error_path = os.path.join(args.results_dir, "per_agent_mae_2d.png")
-    save_model_mae_chart(metrics, mae_chart_path)
-    save_prediction_scatter(y_test, predictions, scatter_path)
-    save_per_agent_error_chart(
-        y_test,
-        predictions,
-        per_agent_error_path,
-        title="Per-Agent Test MAE by Model",
-    )
-
-    print("\n--- Final Test Results ---")
-    print(f"NN MAE:    {metrics.loc[0, 'test_mae']:.6f}")
-    print(f"RF MAE:    {metrics.loc[1, 'test_mae']:.6f}")
-    print(f"Extra MAE: {metrics.loc[2, 'test_mae']:.6f}")
-    print(f"\nMetrics saved to {metrics_path}")
-    print(f"MAE comparison chart saved to {mae_chart_path}")
-    print(f"Prediction scatter chart saved to {scatter_path}")
-    print(f"Per-agent error chart saved to {per_agent_error_path}")
 
 if __name__ == "__main__":
     main()

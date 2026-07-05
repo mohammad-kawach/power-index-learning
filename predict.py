@@ -1,3 +1,5 @@
+"""Compare exact indices with all trained predictors for one voting game."""
+
 import argparse
 import os
 import pickle
@@ -5,109 +7,101 @@ import pickle
 import numpy as np
 import pandas as pd
 
-from src.banzhaf import exact_banzhaf, NUM_AGENTS
-from src.features import create_features_for_one_game, clean_prediction
+from src.banzhaf import exact_power_indices
+from src.features import clean_prediction, create_features_for_one_game
 from src.nn import NumpyMLP
-from src.plots import save_prediction_chart, save_per_agent_error_chart
+from src.plots import save_per_agent_error_chart, save_prediction_chart
 
-DEFAULT_MODELS_DIR = "models"
-DEFAULT_RESULTS_DIR = "results"
+
+MODEL_FILES = {
+    "Scratch Random Forest": "{index}_scratch_random_forest.pkl",
+    "Scratch Extra Trees": "{index}_scratch_extra_trees.pkl",
+    "sklearn MLP": "{index}_sklearn_mlp.pkl",
+    "sklearn Random Forest": "{index}_sklearn_random_forest.pkl",
+    "sklearn Extra Trees": "{index}_sklearn_extra_trees.pkl",
+}
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Compare exact and predicted Banzhaf values for one game.")
-    parser.add_argument(
-        "--weights",
-        nargs=NUM_AGENTS,
-        type=float,
-        default=[4, 2, 7, 1, 5],
-        metavar="W",
-        help=f"Exactly {NUM_AGENTS} agent weights.",
-    )
-    parser.add_argument("--quota", type=float, default=10, help="Voting quota.")
-    parser.add_argument("--models-dir", default=DEFAULT_MODELS_DIR, help="Directory containing saved models.")
-    parser.add_argument("--results-dir", default=DEFAULT_RESULTS_DIR, help="Directory for saved prediction artifacts.")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--weights", nargs="+", type=float, default=[4, 2, 7, 1, 5, 3, 6, 2])
+    parser.add_argument("--quota", type=float, default=16)
+    parser.add_argument("--indices", nargs="+", choices=("banzhaf", "shapley"), default=["banzhaf", "shapley"])
+    parser.add_argument("--models-dir", default="models")
+    parser.add_argument("--results-dir", default="results")
     return parser.parse_args()
 
 
-def require_model_files(models_dir):
-    paths = {
-        "mlp": os.path.join(models_dir, "mlp_numpy_2d.npz"),
-        "rf": os.path.join(models_dir, "random_forest_scratch.pkl"),
-        "extra": os.path.join(models_dir, "extra_trees_scratch.pkl"),
-    }
-    missing = [path for path in paths.values() if not os.path.exists(path)]
+def _load_predictions(index_name, features, models_dir):
+    mlp_path = os.path.join(models_dir, f"{index_name}_numpy_mlp.npz")
+    required = [mlp_path] + [
+        os.path.join(models_dir, template.format(index=index_name))
+        for template in MODEL_FILES.values()
+    ]
+    missing = [path for path in required if not os.path.exists(path)]
     if missing:
-        missing_text = "\n".join(f"- {path}" for path in missing)
-        raise FileNotFoundError(f"Missing model files. Run train_models.py first:\n{missing_text}")
-    return paths
+        raise FileNotFoundError(
+            "Missing model files; run train_models.py first:\n" + "\n".join(f"- {path}" for path in missing)
+        )
+
+    mlp, mean, std = NumpyMLP.load(mlp_path)
+    predictions = {
+        "Scratch MLP": clean_prediction(mlp.predict(np.array([(features - mean) / std]))[0])
+    }
+    for label, template in MODEL_FILES.items():
+        path = os.path.join(models_dir, template.format(index=index_name))
+        with open(path, "rb") as handle:
+            artifact = pickle.load(handle)
+        if label.startswith("sklearn"):
+            model = artifact["model"]
+            model_features = (features - mean) / std if artifact["scaled"] else features
+        else:
+            model = artifact
+            model_features = features
+        predictions[label] = clean_prediction(model.predict(np.array([model_features]))[0])
+    return predictions
 
 
 def main(args=None):
-    if args is None:
-        args = parse_args()
-
+    args = parse_args() if args is None else args
+    weights = np.asarray(args.weights, dtype=float)
+    if weights.size < 2:
+        raise ValueError("provide at least two weights")
     os.makedirs(args.results_dir, exist_ok=True)
-    example_weights = np.array(args.weights, dtype=float)
-    example_quota = args.quota
+    features = create_features_for_one_game(weights, args.quota)
+    exact_banzhaf, exact_shapley = exact_power_indices(weights, args.quota)
+    exact_indices = {"banzhaf": exact_banzhaf, "shapley": exact_shapley}
 
-    real_banzhaf = exact_banzhaf(example_weights, example_quota)
-    example_features = create_features_for_one_game(example_weights, example_quota)
+    for index_name in args.indices:
+        exact = exact_indices[index_name]
+        predictions = _load_predictions(index_name, features, args.models_dir)
+        table_data = {"Agent": [f"Agent {i}" for i in range(weights.size)], "Exact": exact}
+        table_data.update(predictions)
+        table = pd.DataFrame(table_data)
+        print(f"\n=== {index_name.replace('_', ' ').title()} ===")
+        print(table.to_string(index=False, float_format=lambda value: f"{value:.4f}"))
 
-    paths = require_model_files(args.models_dir)
-    mlp_model, mean, std = NumpyMLP.load(paths["mlp"])
-    with open(paths["rf"], "rb") as f:
-        rf_model = pickle.load(f)
-    with open(paths["extra"], "rb") as f:
-        extra_model = pickle.load(f)
+        prefix = os.path.join(args.results_dir, f"example_{index_name}")
+        table.to_csv(f"{prefix}_predictions.csv", index=False)
+        errors = pd.DataFrame(
+            {"Agent": table_data["Agent"], **{label: np.abs(value - exact) for label, value in predictions.items()}}
+        )
+        errors.to_csv(f"{prefix}_errors.csv", index=False)
+        save_prediction_chart(
+            exact,
+            predictions,
+            f"{prefix}_comparison.png",
+            title=f"Exact vs Predicted {index_name.replace('_', ' ').title()}",
+            ylabel="Normalized power",
+        )
+        save_per_agent_error_chart(
+            exact,
+            predictions,
+            f"{prefix}_errors.png",
+            title=f"Example {index_name.replace('_', ' ').title()} Absolute Error",
+            ylabel="Absolute error",
+        )
 
-    scaled_features = (example_features - mean) / std
-    mlp_prediction = clean_prediction(mlp_model.predict(np.array([scaled_features]))[0])
-
-    rf_prediction = clean_prediction(rf_model.predict(np.array([example_features]))[0])
-    extra_prediction = clean_prediction(extra_model.predict(np.array([example_features]))[0])
-
-    table = pd.DataFrame({
-        "Agent": [f"Agent {i}" for i in range(NUM_AGENTS)],
-        "Real": np.round(real_banzhaf, 4),
-        "NN": np.round(mlp_prediction, 4),
-        "RF": np.round(rf_prediction, 4),
-        "Extra": np.round(extra_prediction, 4),
-    })
-
-    errors = pd.DataFrame({
-        "Agent": [f"Agent {i}" for i in range(NUM_AGENTS)],
-        "NN_abs_error": np.round(np.abs(mlp_prediction - real_banzhaf), 4),
-        "RF_abs_error": np.round(np.abs(rf_prediction - real_banzhaf), 4),
-        "Extra_abs_error": np.round(np.abs(extra_prediction - real_banzhaf), 4),
-    })
-
-    print("\n--- Midterm Example Prediction ---")
-    print(table.to_string(index=False))
-
-    table_path = os.path.join(args.results_dir, "example_prediction_table.csv")
-    errors_path = os.path.join(args.results_dir, "example_prediction_errors.csv")
-    chart_path = os.path.join(args.results_dir, "midterm_comparison.png")
-    error_chart_path = os.path.join(args.results_dir, "example_prediction_errors.png")
-    table.to_csv(table_path, index=False)
-    errors.to_csv(errors_path, index=False)
-    predictions = {"NN": mlp_prediction, "RF": rf_prediction, "Extra": extra_prediction}
-    save_prediction_chart(
-        real_banzhaf,
-        predictions,
-        chart_path,
-    )
-    save_per_agent_error_chart(
-        real_banzhaf,
-        predictions,
-        error_chart_path,
-        title="Example Prediction Absolute Error",
-        ylabel="Absolute Error",
-    )
-    print(f"\nPrediction table saved to {table_path}")
-    print(f"Prediction errors saved to {errors_path}")
-    print(f"Chart saved to {chart_path}")
-    print(f"Error chart saved to {error_chart_path}")
 
 if __name__ == "__main__":
     main()

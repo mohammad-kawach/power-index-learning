@@ -1,577 +1,454 @@
-# InfluenceNet Mini — From-Scratch Banzhaf Prediction
+# InfluenceNet Mini: Learning Power Indices
 
-This project is a small **2D from-scratch prototype inspired by InfluenceNet**.
+A reproducible, educational toolkit for calculating and learning power in weighted voting games. It computes exact **Banzhaf** and **Shapley--Shubik** indices, estimates Banzhaf power with Monte Carlo confidence intervals, and compares six multi-output regressors across from-scratch and scikit-learn implementations.
 
-It predicts **Banzhaf power indices** for weighted voting games using models implemented from scratch with only:
+> This repository is a tabular prototype inspired by [InfluenceNet](https://arxiv.org/abs/2503.08381). It is not a reproduction of the paper's full Marginal Contribution Network architecture.
 
-- Python
-- NumPy
-- Pandas
-- Matplotlib
+![Exact Banzhaf and Shapley--Shubik power for the example game](results/exact_power_indices.png)
 
-No scikit-learn, PyTorch, or TensorFlow is used.
+## Highlights
 
----
+| Capability | Included implementation |
+| --- | --- |
+| Exact power | exhaustive Banzhaf and Shapley--Shubik enumeration |
+| Scalable estimation | plain, antithetic, and coalition-size-stratified Monte Carlo Banzhaf |
+| Uncertainty | standard errors and configurable normal-approximation confidence intervals |
+| From-scratch models | NumPy MLP, Random Forest, and Extra Trees |
+| Matched baselines | scikit-learn MLP, Random Forest, and Extra Trees |
+| Configurable games | dynamic agent count; the reference experiment uses 8 agents |
+| Reproducibility | seeded data generation, sampling, splitting, and model training |
+| Evaluation | overall MAE, per-agent MAE, predicted-vs-exact scatter, and example errors |
 
-## Project Idea
+No GPU is required. The project runs on Linux, macOS, Windows, and Windows Subsystem for Linux with Python 3.10 or newer.
 
-A weighted voting game has:
+## Contents
 
-- several agents / voters
-- one weight for each agent
-- one quota
+- [How it works](#how-it-works)
+- [Power indices](#power-indices)
+- [Reference results](#reference-results)
+- [Install on Linux, macOS, or Windows](#install-on-linux-macos-or-windows)
+- [Run the project](#run-the-project)
+- [Monte Carlo API](#monte-carlo-api)
+- [Generated files](#generated-files)
+- [Project structure](#project-structure)
+- [Reproducibility and limitations](#reproducibility-and-limitations)
+- [Troubleshooting](#troubleshooting)
 
-A coalition wins if the sum of its weights is at least the quota.
+## How it works
 
-The **Banzhaf power index** measures how influential each agent is.  
-An agent is powerful if adding it to a losing coalition often changes the result from losing to winning.
-
-Exact Banzhaf calculation is possible for a small number of agents, but it becomes expensive when the number of agents increases because all possible coalitions must be checked.
-
-For larger games, the project also provides a Monte Carlo Banzhaf estimator that samples coalitions instead of enumerating all of them. The goal of the machine learning models remains to learn these power values directly from the voting game parameters.
-
----
-
-## Relation to InfluenceNet
-
-This project is inspired by the InfluenceNet idea:
-
-> Use neural networks to approximate power indices instead of calculating them exactly every time.
-
-The Monte Carlo implementation adapts Algorithm 4 from the [InfluenceNet paper](https://arxiv.org/abs/2503.08381) to this repository's weighted voting games.
-
-However, this repository is currently a **simplified 2D version**.
-
-In this project, each game is represented as a tabular feature vector:
-
-```text
-weights + quota + engineered features
+```mermaid
+flowchart LR
+    A[Weights + quota] --> B[Exact Banzhaf labels]
+    A --> C[Exact Shapley-Shubik labels]
+    A --> D[3n + 2 features]
+    B --> E[Seeded 80/20 split]
+    C --> E
+    D --> E
+    E --> F[3 from-scratch models]
+    E --> G[3 scikit-learn models]
+    F --> H[MAE + diagnostic plots]
+    G --> H
+    H --> I[Saved models + predictions]
 ```
 
-The full InfluenceNet-style extension with **3D rule-based game representations / Marginal Contribution Networks** is planned as future work.
+For a game with `n` agents, each model receives `3n + 2` features:
 
-So this project should be understood as:
+1. `n` raw weights;
+2. the quota;
+3. `n` weights divided by total weight;
+4. `n` weights divided by the quota;
+5. quota divided by total weight.
+
+The default eight-agent experiment therefore has 26 input features and predicts an eight-value power distribution. Banzhaf and Shapley--Shubik use separate models; outputs are projected to non-negative vectors that sum to one before evaluation.
+
+## Power indices
+
+A weighted voting game is written as `[q; w_1, ..., w_n]`. A coalition `S` wins when:
 
 ```text
-A 2D weighted voting game prototype inspired by InfluenceNet.
+sum(w_i for i in S) >= q
 ```
 
----
+Agent `i` is critical, or has a *swing*, when a coalition loses without `i` and wins after `i` joins.
 
-## Monte Carlo Banzhaf Approximation
+### Normalized Banzhaf power
 
-`src/banzhaf.py` contains two calculation methods:
+The raw Banzhaf score is the fraction of coalitions of the other agents for which the agent is critical. This project normalizes the raw scores so that the agents' power sums to one.
 
-| Function | Intended use | Cost |
+### Shapley--Shubik power
+
+The Shapley--Shubik index is the probability that an agent is pivotal in a uniformly random ordering. A swing coalition of size `s` receives weight:
+
+```text
+s! (n - s - 1)! / n!
+```
+
+Exact enumeration costs `O(n 2^n)`. It is practical for the moderate games used to generate training labels; use the Monte Carlo estimator when exact Banzhaf computation becomes too expensive.
+
+## Reference results
+
+The committed figures are a transparent reference run of the current pipeline: 20,000 generated eight-agent games, a deterministic 80/20 split, 300 MLP epochs, and 40 trees per ensemble. **Lower MAE is better.** Re-running with different dependency versions or arguments can change the values.
+
+| Power index | Model | Implementation | Test MAE |
+| --- | --- | --- | ---: |
+| Banzhaf | MLP | from scratch | **0.0169** |
+| Banzhaf | MLP | scikit-learn | 0.0216 |
+| Banzhaf | Extra Trees | scikit-learn | 0.0219 |
+| Banzhaf | Random Forest | scikit-learn | 0.0244 |
+| Banzhaf | Random Forest | from scratch | 0.0271 |
+| Banzhaf | Extra Trees | from scratch | 0.0287 |
+| Shapley--Shubik | MLP | from scratch | **0.0189** |
+| Shapley--Shubik | Extra Trees | scikit-learn | 0.0232 |
+| Shapley--Shubik | MLP | scikit-learn | 0.0233 |
+| Shapley--Shubik | Random Forest | scikit-learn | 0.0261 |
+| Shapley--Shubik | Random Forest | from scratch | 0.0286 |
+| Shapley--Shubik | Extra Trees | from scratch | 0.0307 |
+
+### Overall model comparison
+
+This chart compares all six models on both targets using the same held-out games and MAE calculation.
+
+![Mean absolute error for every model and power index](results/model_mae_comparison.png)
+
+### Predicted versus exact values
+
+Points on the dashed diagonal are perfect predictions. These plots reveal calibration and difficult high-power cases that one average score can hide.
+
+<table>
+  <tr>
+    <th>Banzhaf</th>
+    <th>Shapley--Shubik</th>
+  </tr>
+  <tr>
+    <td><img src="results/banzhaf_prediction_scatter.png" alt="Banzhaf predicted versus exact scatter plot"></td>
+    <td><img src="results/shapley_prediction_scatter.png" alt="Shapley-Shubik predicted versus exact scatter plot"></td>
+  </tr>
+</table>
+
+### Error by agent position
+
+Per-agent plots check whether a model's aggregate MAE hides a position-specific weakness.
+
+<table>
+  <tr>
+    <th>Banzhaf per-agent MAE</th>
+    <th>Shapley--Shubik per-agent MAE</th>
+  </tr>
+  <tr>
+    <td><img src="results/banzhaf_per_agent_mae.png" alt="Banzhaf per-agent MAE"></td>
+    <td><img src="results/shapley_per_agent_mae.png" alt="Shapley-Shubik per-agent MAE"></td>
+  </tr>
+</table>
+
+### NumPy MLP learning curves
+
+Training loss and held-out MAE flatten for both independently trained target models. They use separate vertical scales because cross-entropy training loss and MAE are different quantities.
+
+<table>
+  <tr>
+    <th>Banzhaf training</th>
+    <th>Shapley--Shubik training</th>
+  </tr>
+  <tr>
+    <td><img src="results/banzhaf_numpy_mlp_training.png" alt="Banzhaf NumPy MLP learning curve"></td>
+    <td><img src="results/shapley_numpy_mlp_training.png" alt="Shapley-Shubik NumPy MLP learning curve"></td>
+  </tr>
+</table>
+
+### One-game prediction comparison
+
+The example game is `[16; 4, 2, 7, 1, 5, 3, 6, 2]`. The first pair of charts compares exact power with every model; the second pair exposes each absolute error directly.
+
+<table>
+  <tr>
+    <th>Banzhaf: exact versus predicted</th>
+    <th>Shapley--Shubik: exact versus predicted</th>
+  </tr>
+  <tr>
+    <td><img src="results/example_banzhaf_comparison.png" alt="Exact versus predicted Banzhaf example"></td>
+    <td><img src="results/example_shapley_comparison.png" alt="Exact versus predicted Shapley-Shubik example"></td>
+  </tr>
+  <tr>
+    <th>Banzhaf absolute error</th>
+    <th>Shapley--Shubik absolute error</th>
+  </tr>
+  <tr>
+    <td><img src="results/example_banzhaf_errors.png" alt="Banzhaf example absolute errors"></td>
+    <td><img src="results/example_shapley_errors.png" alt="Shapley-Shubik example absolute errors"></td>
+  </tr>
+</table>
+
+### Monte Carlo methods and uncertainty
+
+The black crosses are exact Banzhaf values. Colored points show the three estimators with 95% confidence intervals from 10,000 statistical samples.
+
+![Plain, antithetic, and stratified Monte Carlo Banzhaf estimates with confidence intervals](results/monte_carlo_confidence_intervals.png)
+
+| Method | Sampling design | Tradeoff |
 | --- | --- | --- |
-| `exact_banzhaf()` | small games and exact labels | exponential in the number of agents |
-| `monte_carlo_banzhaf()` | larger games where enumeration is impractical | `O(num_samples * num_agents)` |
+| `plain` | independent Bernoulli coalition membership | lowest computation per sample |
+| `antithetic` | averages a coalition with its complement | two evaluations per statistical sample; often narrower intervals |
+| `stratified` | samples separately at every coalition size | covers rare sizes; requires `num_samples >= n` |
 
-The Monte Carlo method follows the paper's sampling approach. Each simulation creates a uniformly random coalition. For every agent, it checks whether adding that agent to the corresponding coalition of the other agents changes the outcome from losing to winning. The fraction of critical samples estimates the agent's raw Banzhaf power; the final estimates are normalized to sum to `1`, matching `exact_banzhaf()`.
+## Install on Linux, macOS, or Windows
 
-The paper uses 10,000 simulations, which is also the default here:
+### Prerequisites
 
-```python
-import numpy as np
+| Platform | Install first |
+| --- | --- |
+| Ubuntu / Debian | `sudo apt install git python3 python3-pip python3-venv` |
+| Fedora / RHEL | `sudo dnf install git python3 python3-pip` |
+| macOS | install Python 3 from [python.org](https://www.python.org/downloads/) or `brew install python git` |
+| Windows | install Git and Python 3 from [python.org](https://www.python.org/downloads/windows/); enable **Add Python to PATH** |
+| WSL | follow the Linux instructions inside the WSL terminal |
 
-from src.banzhaf import monte_carlo_banzhaf
+Python 3.10+ and Git are required. A virtual environment is strongly recommended so project packages do not modify the system Python.
 
-weights = np.arange(1, 51)  # 50-agent game
-quota = 765
+### 1. Clone the repository
 
-power = monte_carlo_banzhaf(
-    weights,
-    quota,
-    num_samples=10_000,
-    seed=42,
-)
-
-print(power)
-print(power.sum())  # approximately 1.0 (subject to floating-point rounding)
-```
-
-`seed` makes repeated runs reproducible. Increase `num_samples` to reduce sampling noise. `batch_size` defaults to 10,000 and can be lowered when memory is constrained without changing the estimate for a fixed seed:
-
-```python
-power = monte_carlo_banzhaf(
-    weights,
-    quota,
-    num_samples=100_000,
-    seed=42,
-    batch_size=2_000,
-)
-```
-
-This is a statistical estimate, so it is not guaranteed to equal exact enumeration. If no critical event is observed for any agent, the function returns an all-zero vector, consistent with `exact_banzhaf()` for a game with no swings.
-
----
-
-## Models
-
-This project compares three models implemented from scratch:
-
-| Model                      | Explanation                                                                             |
-| -------------------------- | --------------------------------------------------------------------------------------- |
-| NumPy Neural Network       | Two hidden layers, ReLU activation, softmax output, mini-batch training, Adam optimizer |
-| From-Scratch Random Forest | Many regression trees trained on bootstrap samples                                      |
-| From-Scratch Extra Trees   | Many randomized regression trees with random thresholds                                 |
-
----
-
-## Latest Generated Results
-
-The latest regenerated 2D test output reports:
-
-| Model                      | Test MAE |
-| -------------------------- | -------: |
-| NumPy Neural Network       |   0.0179 |
-| From-Scratch Random Forest |   0.0348 |
-| From-Scratch Extra Trees   |   0.0386 |
-
-The neural network performs best overall on the full test set.
-
-These values come from `results/model_metrics_2d.csv`. The result images below were regenerated by the same project workflow and are the current generated outputs.
-
-For one example voting game:
-
-```python
-example_weights = np.array([4, 2, 7, 1, 5])
-example_quota = 10
-```
-
-The models correctly learn the general power structure:
-
-```text
-Agent 2 has the highest power.
-Agents 0 and 4 have medium power.
-Agents 1 and 3 have lower power.
-```
-
----
-
-## Visual Results
-
-### Neural network training curve
-
-![Latest regenerated neural network training curve](results/mlp_training_curve_2d.png)
-
-This image is created by `train_models.py` and saved as:
-
-```text
-results/mlp_training_curve_2d.png
-```
-
-During training, the NumPy neural network records one row per epoch with:
-
-* training loss
-* test mean absolute error
-
-The plot is generated from `results/mlp_training_history.csv` by `save_loss_curve()` in `src/plots.py`.
-
-The blue line is the neural network training loss.  
-The orange line is the test MAE, which measures the average absolute difference between predicted and exact Banzhaf values on the held-out test set.
-
-Both lines flatten after training, which shows that the model has mostly stabilized. The plot uses separate y-axes because training loss and test MAE have different scales.
-
-### Detailed benchmark plots
-
-After the latest merge, `train_models.py` creates the following benchmark plots:
-
-```text
-results/model_mae_comparison.png
-results/test_prediction_scatter.png
-results/per_agent_mae_2d.png
-```
-
-These plots make it easier to compare model performance beyond the raw MAE table:
-
-| Plot | Meaning |
-| ---- | ------- |
-| `model_mae_comparison.png` | bar chart comparing each model's test MAE |
-| `test_prediction_scatter.png` | predicted vs exact Banzhaf values across the test set |
-| `per_agent_mae_2d.png` | average prediction error for each agent and model |
-
-#### Model MAE comparison
-
-![Model MAE comparison](results/model_mae_comparison.png)
-
-This chart compares the final test MAE for the NumPy neural network, random forest, and extra trees models. Lower values are better.
-
-#### Predicted vs exact values
-
-![Predicted vs exact Banzhaf values](results/test_prediction_scatter.png)
-
-This scatter plot compares every predicted Banzhaf value against the exact value from the test set. Points closer to the dashed diagonal line are more accurate.
-
-#### Per-agent MAE
-
-![Per-agent MAE by model](results/per_agent_mae_2d.png)
-
-This plot shows whether a model has higher error on specific agent positions instead of only reporting one overall test MAE.
-
-### Example prediction comparison
-
-![Latest regenerated example prediction comparison](results/midterm_comparison.png)
-
-This image is created by `predict.py` and saved as:
-
-```text
-results/midterm_comparison.png
-```
-
-The example game is:
-
-```python
-example_weights = np.array([4, 2, 7, 1, 5])
-example_quota = 10
-```
-
-The script builds this chart by:
-
-1. calculating the exact Banzhaf values with `exact_banzhaf()`
-2. creating the same engineered feature vector used during training
-3. loading the saved neural network, random forest, and extra trees models from `models/`
-4. predicting one Banzhaf value per agent for each model
-5. writing the table, absolute errors, and chart into `results/`
-
-In the chart, each agent has four bars:
-
-| Bar   | Meaning |
-| ----- | ------- |
-| Real  | exact Banzhaf value from full coalition enumeration |
-| NN    | prediction from the NumPy neural network |
-| RF    | prediction from the from-scratch random forest |
-| Extra | prediction from the from-scratch extra trees model |
-
-Bars that are close together mean the model predicted that agent's power accurately. For this example, all three models recover the main structure: Agent 2 is the most powerful, Agents 0 and 4 are medium-power agents, and Agents 1 and 3 have lower power.
-
-The exact values, prediction errors, and error chart are also saved in:
-
-```text
-results/example_prediction_table.csv
-results/example_prediction_errors.csv
-results/example_prediction_errors.png
-```
-
-#### Example prediction absolute errors
-
-![Example prediction absolute errors](results/example_prediction_errors.png)
-
-This chart shows the absolute error for each model on each agent in the example voting game.
-
----
-
-## Folder Structure
-
-```text
-influencenet_from_scratch/
-├── data/
-│   └── midterm_2d_data.csv
-├── models/
-│   ├── mlp_numpy_2d.npz
-│   ├── random_forest_scratch.pkl
-│   └── extra_trees_scratch.pkl
-├── results/
-│   ├── mlp_training_curve_2d.png
-│   ├── mlp_training_history.csv
-│   ├── model_metrics_2d.csv
-│   ├── model_mae_comparison.png
-│   ├── test_prediction_scatter.png
-│   ├── per_agent_mae_2d.png
-│   ├── example_prediction_table.csv
-│   ├── example_prediction_errors.csv
-│   ├── example_prediction_errors.png
-│   └── midterm_comparison.png
-├── src/
-│   ├── __init__.py
-│   ├── banzhaf.py
-│   ├── features.py
-│   ├── nn.py
-│   ├── plots.py
-│   ├── scaler.py
-│   └── trees.py
-├── tests/
-│   └── test_banzhaf.py
-├── generate_data.py
-├── train_models.py
-├── predict.py
-├── requirements.txt
-├── .gitignore
-└── README.md
-```
-
----
-
-## Setup and Local Installation
-
-Follow these steps to clone the project and run it locally from a clean machine.
-
-### 1. Install required software
-
-Make sure these tools are installed first:
-
-| Tool | Why it is needed |
-| ---- | ---------------- |
-| Git | Clones the project from GitHub |
-| Python 3 | Runs the data generation, training, and prediction scripts |
-| pip | Installs Python dependencies |
-| venv | Creates an isolated Python environment |
-
-Recommended versions:
-
-```text
-Python 3.10 or newer
-Git 2.x or newer
-```
-
-Check your installation:
-
-```bash
-git --version
-python3 --version
-python3 -m pip --version
-```
-
-On Windows, your Python command may be `python` instead of `python3`.
-
-### 2. Clone the project
+Run this on every platform, then keep the terminal in the repository root for all later commands:
 
 ```bash
 git clone https://github.com/mohammad-kawach/power-index-learning.git
 cd power-index-learning
 ```
 
-### 3. Create a virtual environment
+### 2. Create the environment and install packages
 
-macOS / Linux:
+#### Linux, macOS, and WSL
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
-Windows PowerShell:
+#### Windows PowerShell
 
 ```powershell
-python -m venv .venv
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+If PowerShell blocks activation, allow scripts only for the current process and retry:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\.venv\Scripts\Activate.ps1
 ```
 
-After activation, your terminal prompt should show `(.venv)`.
+#### Windows Command Prompt
 
-### 4. Install dependencies
+```bat
+py -3 -m venv .venv
+.venv\Scripts\activate.bat
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
 
-Upgrade pip:
+After activation, all platforms can use `python`. The installed runtime packages are NumPy, pandas, Matplotlib, and scikit-learn.
+
+### 3. Verify the installation
 
 ```bash
-python3 -m pip install --upgrade pip
+python -c "import numpy, pandas, matplotlib, sklearn; print('environment ready')"
+python -m unittest discover -s tests -v
 ```
 
-Install the project dependencies:
+## Run the project
+
+### Fast local smoke run
+
+Use this smaller workflow first. It validates data generation, all six training paths, serialization, prediction, and plotting without the cost of the reference run.
 
 ```bash
-python3 -m pip install -r requirements.txt
+python generate_data.py --num-games 500 --num-agents 8 --seed 42
+python train_models.py --epochs 20 --sklearn-max-iter 50 --n-estimators 5
+python predict.py
+python monte_carlo_demo.py --samples 10000
 ```
 
-The main dependencies are:
+The smoke run is for integration checking, not benchmark-quality accuracy.
 
-```text
-numpy
-pandas
-matplotlib
-```
+### Full reproducible workflow
 
-### 5. Verify the setup
-
-Run this command to make sure Python can import the required libraries:
+#### 1. Generate exact labels
 
 ```bash
-python3 -c "import numpy, pandas, matplotlib; print('Setup is ready')"
+python generate_data.py \
+  --num-games 20000 \
+  --num-agents 8 \
+  --seed 42 \
+  --output data/voting_games.csv
 ```
 
-If you are on Windows and `python3` does not work, use `python` instead.
+The CSV contains `weight_*`, `quota`, `banzhaf_target_*`, and `shapley_target_*` columns. Exact generation is exponential in agent count, so increasing `--num-agents` can sharply increase runtime.
 
----
-
-## Run the Project
-
-### 1. Generate the dataset
+#### 2. Train and compare all models
 
 ```bash
-python3 generate_data.py
+python train_models.py \
+  --data data/voting_games.csv \
+  --epochs 300 \
+  --sklearn-max-iter 300 \
+  --n-estimators 40
 ```
 
-This creates:
-
-```text
-data/midterm_2d_data.csv
-```
-
-You can also control the dataset size and seed:
+Useful alternatives:
 
 ```bash
-python3 generate_data.py --num-games 20000 --seed 42
+# Train only one power-index target
+python train_models.py --indices banzhaf
+python train_models.py --indices shapley
+
+# Show each from-scratch tree as it completes
+python train_models.py --verbose
 ```
 
----
-
-### 2. Train the models
+#### 3. Compare every model on one game
 
 ```bash
-python3 train_models.py
+python predict.py
 ```
 
-This trains:
-
-* NumPy Neural Network
-* From-Scratch Random Forest
-* From-Scratch Extra Trees
-
-It saves the trained models in:
-
-```text
-models/
-```
-
-Expected saved model files:
-
-```text
-models/mlp_numpy_2d.npz
-models/random_forest_scratch.pkl
-models/extra_trees_scratch.pkl
-```
-
-It also saves metrics and plots in:
-
-```text
-results/
-```
-
-Useful saved files include:
-
-```text
-results/model_metrics_2d.csv
-results/mlp_training_history.csv
-results/mlp_training_curve_2d.png
-results/model_mae_comparison.png
-results/test_prediction_scatter.png
-results/per_agent_mae_2d.png
-```
-
----
-
-### 3. Run one example prediction
+Or provide a custom game with the same number of agents used for training:
 
 ```bash
-python3 predict.py
+python predict.py --weights 4 2 7 1 5 3 6 2 --quota 16
 ```
 
-The example uses:
+A model trained with eight-agent rows cannot accept a different number of weights. Regenerate the dataset and retrain to change the model dimensions.
+
+#### 4. Compare Monte Carlo estimators
+
+```bash
+python monte_carlo_demo.py \
+  --weights 4 2 7 1 5 3 6 2 \
+  --quota 16 \
+  --samples 10000 \
+  --seed 42
+```
+
+This step does not require a generated dataset or trained models.
+
+#### 5. Run the test suite
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+Tests cover known exact values, symmetric games, Monte Carlo accuracy and reproducibility, confidence intervals, all sampling methods, invalid inputs, dynamic feature width, and backward-compatible Banzhaf-only data.
+
+### Main command options
+
+| Script | Purpose | Important options |
+| --- | --- | --- |
+| `generate_data.py` | create exact labeled games | `--num-games`, `--num-agents`, `--seed`, `--output` |
+| `train_models.py` | train and evaluate six models | `--indices`, `--epochs`, `--sklearn-max-iter`, `--n-estimators`, `--batch-size` |
+| `predict.py` | compare exact and learned power | `--weights`, `--quota`, `--indices` |
+| `monte_carlo_demo.py` | compare sampling estimators | `--weights`, `--quota`, `--samples`, `--seed` |
+
+Run `python <script>.py --help` for the complete CLI reference.
+
+## Monte Carlo API
+
+The default call returns only the normalized estimate:
 
 ```python
-example_weights = np.array([4, 2, 7, 1, 5])
-example_quota = 10
+from src.banzhaf import monte_carlo_banzhaf
+
+power = monte_carlo_banzhaf(
+    weights=[4, 2, 7, 1, 5, 3, 6, 2],
+    quota=16,
+    num_samples=10_000,
+    seed=42,
+)
 ```
 
-The script prints:
+Request a detailed result to inspect sampling uncertainty:
 
-* exact Banzhaf values
-* neural network prediction
-* random forest prediction
-* extra trees prediction
+```python
+result = monte_carlo_banzhaf(
+    weights=[4, 2, 7, 1, 5, 3, 6, 2],
+    quota=16,
+    num_samples=10_000,
+    seed=42,
+    method="antithetic",       # plain | antithetic | stratified
+    confidence_level=0.95,
+    return_result=True,
+)
 
-You can also test a custom voting game:
-
-```bash
-python3 predict.py --weights 4 2 7 1 5 --quota 10
+print(result.estimate)
+print(result.standard_error)
+print(result.ci_low, result.ci_high)
 ```
 
-It also saves prediction artifacts:
+`MonteCarloResult` also exposes `raw_estimate`, `raw_standard_error`, `num_samples`, `method`, and `confidence_level`. Normalized standard errors use the multivariate delta method; confidence intervals are clipped to `[0, 1]`. These are asymptotic intervals, so increase the sample count for rare swings or estimates near a boundary.
+
+## Generated files
 
 ```text
-results/example_prediction_table.csv
-results/example_prediction_errors.csv
-results/midterm_comparison.png
-results/example_prediction_errors.png
+data/
+└── voting_games.csv
+models/
+├── banzhaf_numpy_mlp.npz
+├── banzhaf_scratch_{random_forest,extra_trees}.pkl
+├── banzhaf_sklearn_{mlp,random_forest,extra_trees}.pkl
+├── shapley_numpy_mlp.npz
+├── shapley_scratch_{random_forest,extra_trees}.pkl
+└── shapley_sklearn_{mlp,random_forest,extra_trees}.pkl
+results/
+├── model_metrics.csv
+├── model_mae_comparison.png
+├── {banzhaf,shapley}_prediction_scatter.png
+├── {banzhaf,shapley}_per_agent_mae.png
+├── {banzhaf,shapley}_numpy_mlp_{history.csv,training.png}
+├── example_{banzhaf,shapley}_{predictions,errors}.csv
+├── example_{banzhaf,shapley}_{comparison,errors}.png
+├── exact_power_indices.png
+└── monte_carlo_confidence_intervals.{csv,png}
 ```
 
-### 4. Run the tests
+Datasets, model binaries, and CSV reports are ignored because they are generated and can grow large. PNG figures are intentionally versioned so the README renders its reference results on GitHub.
 
-```bash
-python3 -m unittest discover -s tests
-```
+## Project structure
 
----
+| Path | Responsibility |
+| --- | --- |
+| `src/banzhaf.py` | exact indices, Monte Carlo methods, and confidence intervals |
+| `src/features.py` | agent-count inference and feature engineering |
+| `src/nn.py` | two-hidden-layer NumPy MLP and Adam optimizer |
+| `src/trees.py` | from-scratch Random Forest and Extra Trees regressors |
+| `src/scaler.py` | from-scratch feature standardization |
+| `src/plots.py` | headless and reproducible result charts |
+| `generate_data.py` | exact labeled dataset generation |
+| `train_models.py` | shared split, training, serialization, and evaluation |
+| `predict.py` | exact-versus-predicted example and error reports |
+| `monte_carlo_demo.py` | sampling-method and interval comparison |
+| `tests/` | unit and regression tests |
 
-## Example Output
+## Reproducibility and limitations
 
-```text
---- Midterm Example Prediction ---
-  Agent   Real     NN     RF  Extra
-Agent 0 0.2308 0.2019 0.2080 0.2062
-Agent 1 0.0769 0.0969 0.0890 0.1199
-Agent 2 0.3846 0.4221 0.3842 0.3507
-Agent 3 0.0769 0.0621 0.0693 0.0702
-Agent 4 0.2308 0.2171 0.2495 0.2531
-```
+- The seed controls data generation, Monte Carlo sampling, train/test splitting, and model initialization.
+- Parallel scikit-learn execution can still cause tiny platform-level floating-point differences.
+- Exact labels cost `O(n 2^n)`; the configurable agent count does not remove that combinatorial limit.
+- Confidence intervals measure Monte Carlo sampling error, not learned-model uncertainty.
+- Output normalization guarantees non-negativity and efficiency, but not every game-theoretic axiom.
+- The educational from-scratch models prioritize readable implementations over production performance.
+- A future InfluenceNet-aligned extension would learn from rule-based or Marginal Contribution Network representations instead of only tabular weighted games.
 
-This shows that all models learned the main power structure of the voting game.
+## Troubleshooting
 
----
-<!--
-## What to Say in a Presentation
-
-### Simple explanation
-
-> In this project, I use machine learning to approximate Banzhaf power indices. The exact calculation checks all possible coalitions, which becomes expensive when the number of agents grows. I generate many small weighted voting games, calculate the exact Banzhaf values, and train models to predict them from the weights, quota, and engineered features.
-
-### Relation to the paper
-
-> This project is inspired by InfluenceNet. The paper uses neural networks to approximate power indices in more complex cooperative games. For the midterm, I implemented a simplified 2D weighted voting game version. This lets me focus on the core idea: learning to approximate Banzhaf values using models implemented from scratch.
-
-### What changed from the old version?
-
-> The old version only used one simple neural network prediction. In the new version, I compare three models: a NumPy neural network, a from-scratch Random Forest, and a from-scratch Extra Trees model. I also added engineered features, train/test evaluation, prediction plots, and saved model files.
-
-### Why softmax in the neural network?
-
-> The Banzhaf values are normalized, so they are non-negative and sum to 1. Softmax helps the neural network output values in the same distribution format.
-
-### Why Random Forest and Extra Trees?
-
-> They are useful baselines. They use many decision trees and average their predictions. Random Forest uses bootstrap samples, while Extra Trees adds more randomness by choosing random split thresholds.
-
-### Why 2D now and 3D later?
-
-> For the midterm, I use a 2D tabular representation with weights and quota. This is easier to explain and enough to demonstrate the main idea. For the final project, I can extend the system to 3D rule-based game representations, which would be closer to the full InfluenceNet paper.
-
----
-
-## Notes
-
-The models in this repository are educational implementations.
-They are not optimized like scikit-learn, but their internal logic is visible and easier to explain.
-
-For better accuracy, increase:
-
-* number of generated games in `generate_data.py`
-* `epochs` in `train_models.py`
-* `n_estimators` in `train_models.py`
-
-For faster training, reduce those values.
-
----
--->
-
-## Future Work
-
-Possible future extensions:
-
-* compare with scikit-learn models
-* add confidence intervals and variance-reduction methods to the Monte Carlo estimator
-* add Shapley-Shubik index prediction
-* add more agents
-* extend from 2D weighted voting games to 3D rule-based Marginal Contribution Networks
-* package the project as an educational open-source toolkit
-
----
+| Problem | Resolution |
+| --- | --- |
+| `python` is not found | activate `.venv`; before activation use `python3` on Unix or `py -3` on Windows |
+| `No module named numpy` or `sklearn` | activate `.venv`, then run `python -m pip install -r requirements.txt` |
+| `data/voting_games.csv not found` | run `python generate_data.py` before training |
+| missing `.npz` or `.pkl` model files | run `python train_models.py` before prediction |
+| PowerShell refuses `Activate.ps1` | use the process-scoped execution-policy command in the Windows setup section |
+| custom prediction has a shape error | pass the same number of weights used by the training dataset |
+| training takes too long | start with the smoke-run arguments and increase games, epochs, and estimators gradually |
+| plots fail on a server without a display | no display is required; plotting uses Matplotlib's headless `Agg` backend |
