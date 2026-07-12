@@ -108,7 +108,14 @@ def save_model_mae_chart(metrics, output_path):
     plt.close(fig)
 
 
-def save_prediction_scatter(real, predictions_dict, output_path, title="Predicted vs Exact Banzhaf Values"):
+def save_prediction_scatter(
+    real,
+    predictions_dict,
+    output_path,
+    title="Predicted vs Exact Values",
+    xlabel="Exact value",
+    ylabel="Predicted value",
+):
     _ensure_output_dir(output_path)
     real_values = np.asarray(real, dtype=float).ravel()
 
@@ -125,8 +132,8 @@ def save_prediction_scatter(real, predictions_dict, output_path, title="Predicte
     axis.set_xlim(0, axis_limit)
     axis.set_ylim(0, axis_limit)
     axis.set_aspect("equal", adjustable="box")
-    axis.set_xlabel("Exact Banzhaf Value")
-    axis.set_ylabel("Predicted Banzhaf Value")
+    axis.set_xlabel(xlabel)
+    axis.set_ylabel(ylabel)
     axis.set_title(title)
     axis.grid(True, alpha=0.25)
     axis.legend()
@@ -219,6 +226,46 @@ def save_power_index_comparison(banzhaf, shapley, output_path):
     axis.set_title("Exact Power Indices for the Example Voting Game")
     axis.grid(True, axis="y", alpha=0.25)
     axis.legend()
+    fig.tight_layout()
+    fig.savefig(output_path)
+    plt.close(fig)
+
+
+def save_mcn_rule_heatmap(rules, output_path):
+    """Visualize one MCN rule matrix as required, banned, and absent agents."""
+    _ensure_output_dir(output_path)
+    rules = np.asarray(rules, dtype=float)
+    num_agents = (rules.shape[1] - 1) // 2
+    required = rules[:, :num_agents]
+    banned = rules[:, num_agents : 2 * num_agents]
+    values = rules[:, -1]
+    membership = required - banned
+
+    fig, (matrix_axis, value_axis) = plt.subplots(
+        1,
+        2,
+        figsize=(max(9, num_agents * 0.8), max(4.5, rules.shape[0] * 0.22)),
+        gridspec_kw={"width_ratios": [4, 1.3]},
+    )
+    image = matrix_axis.imshow(membership, aspect="auto", cmap="coolwarm", vmin=-1, vmax=1)
+    matrix_axis.set_title("MCN Rule Membership")
+    matrix_axis.set_xlabel("Agent")
+    matrix_axis.set_ylabel("Rule")
+    matrix_axis.set_xticks(np.arange(num_agents))
+    matrix_axis.set_xticklabels([f"A{i}" for i in range(num_agents)])
+    matrix_axis.set_yticks(np.arange(rules.shape[0]))
+    matrix_axis.set_yticklabels([f"R{i}" for i in range(rules.shape[0])])
+    colorbar = fig.colorbar(image, ax=matrix_axis, fraction=0.046, pad=0.04)
+    colorbar.set_ticks([-1, 0, 1])
+    colorbar.set_ticklabels(["banned", "absent", "required"])
+
+    value_axis.barh(np.arange(rules.shape[0]), values, color="tab:green")
+    value_axis.invert_yaxis()
+    value_axis.set_title("Value")
+    value_axis.set_xlabel("Weight")
+    value_axis.set_yticks([])
+    value_axis.grid(True, axis="x", alpha=0.25)
+
     fig.tight_layout()
     fig.savefig(output_path)
     plt.close(fig)

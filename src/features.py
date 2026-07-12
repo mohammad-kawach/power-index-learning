@@ -4,6 +4,8 @@ import re
 
 import numpy as np
 
+from src.mcn import validate_rule_batch, validate_rule_tensor
+
 
 def _numbered_columns(columns, prefix):
     pattern = re.compile(rf"^{re.escape(prefix)}(\d+)$")
@@ -59,3 +61,20 @@ def clean_prediction(prediction: np.ndarray) -> np.ndarray:
     prediction = np.maximum(prediction, 0)
     total = prediction.sum()
     return prediction / total if total > 0 else np.ones_like(prediction) / len(prediction)
+
+
+def create_features_for_one_mcn(rules: np.ndarray) -> np.ndarray:
+    """Flatten one MCN rule matrix into model-ready features.
+
+    The project keeps the dataset itself as a real 3D tensor. The flattening is
+    only the final handoff to feedforward regressors, matching the paper's use
+    of the full rule matrix as neural-network input.
+    """
+    rules = validate_rule_tensor(rules)
+    return rules.reshape(-1).astype(float)
+
+
+def create_mcn_feature_matrix(rule_tensor: np.ndarray) -> np.ndarray:
+    """Convert a batch of MCN tensors into a 2D feature matrix for models."""
+    rule_tensor = validate_rule_batch(rule_tensor)
+    return rule_tensor.reshape(rule_tensor.shape[0], -1).astype(float)

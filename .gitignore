@@ -9,6 +9,7 @@ env/
 
 # Project outputs (PNG result figures are intentionally versioned for the README)
 data/*.csv
+data/*.npz
 models/*.npz
 models/*.pkl
 results/*.csv
