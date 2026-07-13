@@ -11,8 +11,6 @@ workflow is still available, but MCNs are the main path.
 The MCN implementation follows the representation described in
 [InfluenceNet AI Models for Banzhaf and Shapley Value Prediction](InfluenceNet%20AI%20Models%20for%20Banzhaf%20and%20Shapley%20Value%20Prediction.pdf).
 
-![MCN model MAE comparison](results/mcn_model_mae_comparison.png)
-
 ## Contents
 
 - [What This Project Does](#what-this-project-does)
@@ -23,6 +21,7 @@ The MCN implementation follows the representation described in
 - [How The Code Works](#how-the-code-works)
 - [Run MCN Experiments](#run-mcn-experiments)
 - [Run Weighted-Voting Experiments](#run-weighted-voting-experiments)
+- [Visual Guide](#visual-guide)
 - [Generated Artifacts](#generated-artifacts)
 - [Python API Examples](#python-api-examples)
 - [Project Structure](#project-structure)
@@ -50,7 +49,7 @@ This repository can:
 
 Requirements:
 
-- Python 3.10 or newer;
+- Python 3.9 or newer;
 - Git, if you are cloning the repository;
 - a terminal.
 
@@ -65,9 +64,9 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-If `python3 --version` prints Python 3.9 or older, install Python 3.10+ and
+If `python3 --version` prints Python 3.8 or older, install Python 3.9+ and
 replace `python3` in the commands above with the newer executable, such as
-`python3.10`.
+`python3.9`.
 
 On Windows PowerShell:
 
@@ -79,8 +78,8 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-If `py -3 --version` selects Python 3.9 or older, use a newer launcher target
-instead, such as `py -3.10`.
+If `py -3 --version` selects Python 3.8 or older, use a newer launcher target
+instead, such as `py -3.9`.
 
 If PowerShell blocks activation, run:
 
@@ -245,9 +244,8 @@ Coalition values:
 | `{a, b}` | all three rules | 6 |
 | `{a, c}` | none | 0 |
 
-The generated MCN rule plot shows this structure visually:
-
-![Generated MCN rule membership heatmap](results/example_mcn_rules.png)
+The visual guide below includes a generated heatmap that shows this same
+structure for one full MCN example.
 
 ## Power Indices
 
@@ -450,7 +448,162 @@ python monte_carlo_demo.py \
   --seed 42
 ```
 
+## Visual Guide
+
+These plots are saved in `results/`. Together they show what the MCN data looks
+like, how the labels behave, how the models perform, and what happens on one
+concrete example game.
+
+### MCN Rule Complexity
+
+![MCN rule complexity summary](results/mcn_rule_complexity.png)
+
+This chart explains the generated rule dataset before any model is trained. The
+first three panels show how many agents are required, banned, or mentioned at
+all in each rule. The final panel shows the rule-value distribution. With the
+default `uniform` value generator, all rule values are `1`, so the value
+histogram correctly collapses into one spike.
+
+### Agent Role Frequency
+
+![MCN agent role frequency](results/mcn_agent_role_frequency.png)
+
+This chart checks whether the generator treats agents evenly. Each group of
+bars shows how often an agent is required, banned, or unused across all rules.
+For a symmetric generator, the bars should be broadly similar across agents.
+
+### Target Distribution
+
+![MCN target distribution](results/mcn_target_distribution.png)
+
+This chart shows the training labels. The histogram shows all normalized
+agent-game target values, while the right panel shows each agent's average
+label and standard deviation. It helps reveal whether the dataset is balanced
+or dominated by a few high-power agents.
+
+### Banzhaf Versus Shapley Labels
+
+![MCN Banzhaf versus Shapley label relationship](results/mcn_index_relationship.png)
+
+This plot compares the two target definitions directly. Points near the dashed
+line mean Banzhaf and Shapley--Shubik assign similar power to the same
+agent-game pair. The histogram shows how different the two label vectors are
+inside each game.
+
+### Model MAE Comparison
+
+![MCN model MAE comparison](results/mcn_model_mae_comparison.png)
+
+This is the model leaderboard. Each bar is a test mean absolute error, so lower
+is better. It compares the NumPy MLP, scratch tree ensembles, and scikit-learn
+baselines for both Banzhaf and Shapley--Shubik targets.
+
+### Banzhaf Prediction Scatter
+
+![MCN Banzhaf predicted versus exact scatter](results/mcn_banzhaf_prediction_scatter.png)
+
+Each point is one predicted Banzhaf value for one agent in one test game. The
+dashed diagonal is perfect prediction. Points tightly clustered around that
+line mean the model is matching the exact labels well.
+
+### Banzhaf Per-Agent Error
+
+![MCN Banzhaf per-agent MAE](results/mcn_banzhaf_per_agent_mae.png)
+
+This chart breaks Banzhaf error down by agent. It helps catch cases where a
+model has a good average score but consistently misses one particular agent
+position.
+
+### Banzhaf Training Curve
+
+![MCN Banzhaf NumPy MLP training curve](results/mcn_banzhaf_numpy_mlp_training.png)
+
+This chart follows the NumPy MLP during Banzhaf training. The loss line shows
+optimization progress on the training set, while the test MAE line shows
+whether that progress generalizes.
+
+### Shapley Prediction Scatter
+
+![MCN Shapley predicted versus exact scatter](results/mcn_shapley_prediction_scatter.png)
+
+This is the same scatter diagnostic for Shapley--Shubik labels. Shapley labels
+come from ordered marginal contributions, so this plot checks whether models
+learn that second target as well as they learn Banzhaf.
+
+### Shapley Per-Agent Error
+
+![MCN Shapley per-agent MAE](results/mcn_shapley_per_agent_mae.png)
+
+This chart shows Shapley--Shubik error by agent. It is useful for spotting
+agent-specific bias that may be hidden in the overall MAE leaderboard.
+
+### Shapley Training Curve
+
+![MCN Shapley NumPy MLP training curve](results/mcn_shapley_numpy_mlp_training.png)
+
+This chart tracks the NumPy MLP while it learns Shapley--Shubik targets. A
+healthy run usually shows training loss falling without test MAE exploding.
+
+### Example MCN Rule Heatmap
+
+![Example MCN rule heatmap](results/example_mcn_rules.png)
+
+This plot shows one concrete MCN rule matrix. Blue cells are required agents,
+red cells are banned agents, and neutral cells are agents not mentioned by that
+rule. The green side bars show each rule's value.
+
+### Example MCN Exact Power
+
+![Example MCN exact Banzhaf and Shapley power](results/example_mcn_exact_power.png)
+
+This plot compares exact Banzhaf and Shapley--Shubik power on the same example
+MCN. Differences between the blue and orange bars show where coalition-based
+and order-based marginal contribution views disagree.
+
+### Example Banzhaf Prediction
+
+![Example MCN Banzhaf exact versus predicted](results/example_mcn_banzhaf_comparison.png)
+
+This chart compares exact Banzhaf power against every trained predictor for
+one example game. It is easier to inspect than the full scatter plot because it
+shows the predictions agent by agent.
+
+### Example Banzhaf Error
+
+![Example MCN Banzhaf absolute errors](results/example_mcn_banzhaf_errors.png)
+
+This chart shows the absolute Banzhaf prediction error for each agent in the
+example game. Shorter bars mean the model was closer to the exact value.
+
+### Example Shapley Prediction
+
+![Example MCN Shapley exact versus predicted](results/example_mcn_shapley_comparison.png)
+
+This is the same single-game comparison for Shapley--Shubik power. It shows
+whether the trained models preserve the exact Shapley ranking of agents.
+
+### Example Shapley Error
+
+![Example MCN Shapley absolute errors](results/example_mcn_shapley_errors.png)
+
+This chart shows the absolute Shapley--Shubik prediction error per agent for
+the example game. It makes the largest misses visible immediately.
+
+### Weighted-Game Exact Power
+
 ![Exact Banzhaf and Shapley--Shubik power for a weighted example](results/exact_power_indices.png)
+
+This plot belongs to the older weighted-voting workflow. It shows exact
+Banzhaf and Shapley--Shubik scores for one weighted game, giving a simple
+baseline before moving to MCNs.
+
+### Weighted Monte Carlo Uncertainty
+
+![Monte Carlo Banzhaf confidence intervals](results/monte_carlo_confidence_intervals.png)
+
+This chart shows Monte Carlo Banzhaf estimates with confidence intervals for
+the weighted-game demo. It explains the uncertainty introduced when the project
+uses sampling instead of exact enumeration.
 
 ## Generated Artifacts
 
@@ -488,6 +641,10 @@ models/mcn_shapley_sklearn_extra_trees.pkl
 
 ```text
 results/mcn_model_metrics.csv
+results/mcn_rule_complexity.png
+results/mcn_agent_role_frequency.png
+results/mcn_target_distribution.png
+results/mcn_index_relationship.png
 results/mcn_model_mae_comparison.png
 results/mcn_banzhaf_prediction_scatter.png
 results/mcn_banzhaf_per_agent_mae.png
@@ -496,13 +653,12 @@ results/mcn_shapley_prediction_scatter.png
 results/mcn_shapley_per_agent_mae.png
 results/mcn_shapley_numpy_mlp_training.png
 results/example_mcn_rules.png
+results/example_mcn_exact_power.png
 results/example_mcn_banzhaf_comparison.png
 results/example_mcn_banzhaf_errors.png
 results/example_mcn_shapley_comparison.png
 results/example_mcn_shapley_errors.png
 ```
-
-![Example MCN Banzhaf exact versus predicted](results/example_mcn_banzhaf_comparison.png)
 
 ## Python API Examples
 

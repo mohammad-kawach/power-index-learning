@@ -1,5 +1,7 @@
 """Exact and Monte Carlo power-index calculations for weighted voting games."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from itertools import product
 from math import comb, factorial

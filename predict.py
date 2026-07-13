@@ -15,7 +15,12 @@ from src.mcn import (
     infer_num_agents_from_rules,
 )
 from src.nn import NumpyMLP
-from src.plots import save_mcn_rule_heatmap, save_per_agent_error_chart, save_prediction_chart
+from src.plots import (
+    save_mcn_rule_heatmap,
+    save_per_agent_error_chart,
+    save_power_index_comparison,
+    save_prediction_chart,
+)
 
 
 MODEL_SUFFIXES = {
@@ -120,11 +125,21 @@ def main(args=None):
         features, exact_indices, rule_table = _prepare_mcn_example(args)
         rule_table_path = os.path.join(args.results_dir, "example_mcn_rules.csv")
         rule_chart_path = os.path.join(args.results_dir, "example_mcn_rules.png")
+        exact_power_chart_path = os.path.join(args.results_dir, "example_mcn_exact_power.png")
         rule_table.to_csv(rule_table_path, index=False)
         save_mcn_rule_heatmap(rule_table.values, rule_chart_path)
+        save_power_index_comparison(
+            exact_indices["banzhaf"],
+            exact_indices["shapley"],
+            exact_power_chart_path,
+            title="Exact Power Indices for the Example MCN",
+        )
         agent_count = len(exact_indices["banzhaf"])
         output_stem = "example_mcn"
-        print(f"Saved MCN rule table to {rule_table_path} and {rule_chart_path}")
+        print(
+            "Saved MCN rule table and charts to "
+            f"{rule_table_path}, {rule_chart_path}, and {exact_power_chart_path}"
+        )
     else:
         weights = np.asarray(args.weights, dtype=float)
         if weights.size < 2:

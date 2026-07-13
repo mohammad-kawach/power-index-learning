@@ -17,6 +17,10 @@ from src.features import (
 from src.nn import NumpyMLP
 from src.plots import (
     save_loss_curve,
+    save_mcn_agent_role_chart,
+    save_mcn_index_relationship_chart,
+    save_mcn_rule_complexity_chart,
+    save_mcn_target_distribution_chart,
     save_model_mae_chart,
     save_per_agent_error_chart,
     save_prediction_scatter,
@@ -115,6 +119,31 @@ def _load_dataset(args):
             )
         targets[index_name] = dataframe[columns].values.astype(float)
     return X, targets, num_agents
+
+
+def _save_mcn_dataset_plots(args, targets):
+    if args.game_type != "mcn":
+        return
+    archive = np.load(args.data, allow_pickle=False)
+    rules = archive["rules"]
+    save_mcn_rule_complexity_chart(
+        rules,
+        _result_name(args, "rule_complexity.png"),
+    )
+    save_mcn_agent_role_chart(
+        rules,
+        _result_name(args, "agent_role_frequency.png"),
+    )
+    save_mcn_target_distribution_chart(
+        targets["banzhaf"],
+        targets["shapley"],
+        _result_name(args, "target_distribution.png"),
+    )
+    save_mcn_index_relationship_chart(
+        targets["banzhaf"],
+        targets["shapley"],
+        _result_name(args, "index_relationship.png"),
+    )
 
 
 def _train_one_index(index_name, X_train, X_test, y_train, y_test, scaler, args):
@@ -259,6 +288,7 @@ def main(args=None):
     for index_name in args.indices:
         if index_name not in targets or targets[index_name].shape[1] != num_agents:
             raise ValueError(f"dataset needs {num_agents} {index_name} target columns")
+    _save_mcn_dataset_plots(args, targets)
 
     rng = np.random.default_rng(RANDOM_SEED)
     permutation = rng.permutation(len(X))

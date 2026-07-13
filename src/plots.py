@@ -209,7 +209,12 @@ def save_monte_carlo_interval_chart(exact, results, output_path):
     plt.close(fig)
 
 
-def save_power_index_comparison(banzhaf, shapley, output_path):
+def save_power_index_comparison(
+    banzhaf,
+    shapley,
+    output_path,
+    title="Exact Power Indices for the Example Voting Game",
+):
     """Plot exact Banzhaf and Shapley--Shubik values for one game."""
     _ensure_output_dir(output_path)
     banzhaf = np.asarray(banzhaf, dtype=float)
@@ -223,9 +228,179 @@ def save_power_index_comparison(banzhaf, shapley, output_path):
     axis.set_xticklabels([f"Agent {i}" for i in agents])
     axis.set_xlabel("Agent")
     axis.set_ylabel("Normalized power")
-    axis.set_title("Exact Power Indices for the Example Voting Game")
+    axis.set_title(title)
     axis.grid(True, axis="y", alpha=0.25)
     axis.legend()
+    fig.tight_layout()
+    fig.savefig(output_path)
+    plt.close(fig)
+
+
+def _split_mcn_rule_tensor(rule_tensor):
+    rule_tensor = np.asarray(rule_tensor, dtype=float)
+    if rule_tensor.ndim == 2:
+        rule_tensor = rule_tensor[None, :, :]
+    if rule_tensor.ndim != 3:
+        raise ValueError("rule_tensor must have shape (games, rules, 2 * agents + 1)")
+    num_agents = (rule_tensor.shape[2] - 1) // 2
+    required = rule_tensor[:, :, :num_agents]
+    banned = rule_tensor[:, :, num_agents : 2 * num_agents]
+    values = rule_tensor[:, :, -1]
+    return required, banned, values
+
+
+def save_mcn_rule_complexity_chart(rule_tensor, output_path):
+    """Show how many required/banned conditions each MCN rule contains."""
+    _ensure_output_dir(output_path)
+    required, banned, values = _split_mcn_rule_tensor(rule_tensor)
+    num_agents = required.shape[2]
+    required_counts = required.sum(axis=2).ravel()
+    banned_counts = banned.sum(axis=2).ravel()
+    condition_counts = required_counts + banned_counts
+    value_values = values.ravel()
+    count_bins = np.arange(-0.5, num_agents + 1.5, 1)
+
+    fig, axes = plt.subplots(2, 2, figsize=(11, 7.5))
+    axes = axes.ravel()
+    axes[0].hist(required_counts, bins=count_bins, color="tab:blue", edgecolor="white")
+    axes[0].set_title("Required agents per rule")
+    axes[0].set_xlabel("Required count")
+    axes[0].set_ylabel("Rules")
+
+    axes[1].hist(banned_counts, bins=count_bins, color="tab:red", edgecolor="white")
+    axes[1].set_title("Banned agents per rule")
+    axes[1].set_xlabel("Banned count")
+    axes[1].set_ylabel("Rules")
+
+    axes[2].hist(condition_counts, bins=count_bins, color="tab:purple", edgecolor="white")
+    axes[2].set_title("Total conditions per rule")
+    axes[2].set_xlabel("Required + banned count")
+    axes[2].set_ylabel("Rules")
+
+    axes[3].hist(value_values, bins=min(20, max(5, value_values.size // 8)), color="tab:green", edgecolor="white")
+    axes[3].set_title("Rule value distribution")
+    axes[3].set_xlabel("Rule value")
+    axes[3].set_ylabel("Rules")
+
+    for axis in axes:
+        axis.grid(True, axis="y", alpha=0.25)
+
+    fig.suptitle("MCN Rule Complexity Summary", y=0.995)
+    fig.tight_layout()
+    fig.savefig(output_path)
+    plt.close(fig)
+
+
+def save_mcn_agent_role_chart(rule_tensor, output_path):
+    """Show how often each agent is required, banned, or unused in MCN rules."""
+    _ensure_output_dir(output_path)
+    required, banned, _ = _split_mcn_rule_tensor(rule_tensor)
+    required_frequency = required.mean(axis=(0, 1))
+    banned_frequency = banned.mean(axis=(0, 1))
+    unused_frequency = 1.0 - required_frequency - banned_frequency
+    agents = np.arange(required.shape[2])
+    width = 0.28
+
+    fig, axis = plt.subplots(figsize=(max(9, len(agents) * 0.9), 5.2))
+    axis.bar(agents - width, required_frequency, width, label="Required", color="tab:blue")
+    axis.bar(agents, banned_frequency, width, label="Banned", color="tab:red")
+    axis.bar(agents + width, unused_frequency, width, label="Unused", color="tab:gray")
+    axis.set_xticks(agents)
+    axis.set_xticklabels([f"Agent {i}" for i in agents])
+    axis.set_ylim(0, 1)
+    axis.set_xlabel("Agent")
+    axis.set_ylabel("Fraction of rules")
+    axis.set_title("How Agents Appear In MCN Rules")
+    axis.grid(True, axis="y", alpha=0.25)
+    axis.legend()
+    fig.tight_layout()
+    fig.savefig(output_path)
+    plt.close(fig)
+
+
+def save_mcn_target_distribution_chart(banzhaf_targets, shapley_targets, output_path):
+    """Plot the distribution of MCN power-index labels in the dataset."""
+    _ensure_output_dir(output_path)
+    banzhaf_values = np.asarray(banzhaf_targets, dtype=float)
+    shapley_values = np.asarray(shapley_targets, dtype=float)
+    flattened = [banzhaf_values.ravel(), shapley_values.ravel()]
+    num_agents = banzhaf_values.shape[1]
+    agents = np.arange(num_agents)
+
+    fig, (hist_axis, mean_axis) = plt.subplots(1, 2, figsize=(12, 5.2))
+    hist_axis.hist(flattened[0], bins=24, alpha=0.65, label="Banzhaf", color="tab:blue")
+    hist_axis.hist(flattened[1], bins=24, alpha=0.65, label="Shapley--Shubik", color="tab:orange")
+    hist_axis.set_xlabel("Normalized power")
+    hist_axis.set_ylabel("Agent-game labels")
+    hist_axis.set_title("Target Value Distribution")
+    hist_axis.grid(True, axis="y", alpha=0.25)
+    hist_axis.legend()
+
+    mean_axis.errorbar(
+        agents - 0.08,
+        banzhaf_values.mean(axis=0),
+        yerr=banzhaf_values.std(axis=0),
+        fmt="o",
+        capsize=3,
+        label="Banzhaf",
+        color="tab:blue",
+    )
+    mean_axis.errorbar(
+        agents + 0.08,
+        shapley_values.mean(axis=0),
+        yerr=shapley_values.std(axis=0),
+        fmt="o",
+        capsize=3,
+        label="Shapley--Shubik",
+        color="tab:orange",
+    )
+    mean_axis.set_xticks(agents)
+    mean_axis.set_xticklabels([f"A{i}" for i in agents])
+    mean_axis.set_xlabel("Agent")
+    mean_axis.set_ylabel("Mean normalized power +/- std")
+    mean_axis.set_title("Average Target By Agent")
+    mean_axis.grid(True, axis="y", alpha=0.25)
+    mean_axis.legend()
+
+    fig.suptitle("MCN Label Distribution", y=1.01)
+    fig.tight_layout()
+    fig.savefig(output_path)
+    plt.close(fig)
+
+
+def save_mcn_index_relationship_chart(banzhaf_targets, shapley_targets, output_path):
+    """Compare Banzhaf and Shapley--Shubik labels across a dataset."""
+    _ensure_output_dir(output_path)
+    banzhaf_values = np.asarray(banzhaf_targets, dtype=float)
+    shapley_values = np.asarray(shapley_targets, dtype=float)
+    banzhaf_flat = banzhaf_values.ravel()
+    shapley_flat = shapley_values.ravel()
+    per_game_difference = np.mean(np.abs(banzhaf_values - shapley_values), axis=1)
+    if banzhaf_flat.size > 1:
+        correlation = float(np.corrcoef(banzhaf_flat, shapley_flat)[0, 1])
+    else:
+        correlation = float("nan")
+
+    fig, (scatter_axis, diff_axis) = plt.subplots(1, 2, figsize=(12, 5.2))
+    max_value = max(banzhaf_flat.max(initial=0), shapley_flat.max(initial=0), 0.05)
+    axis_limit = max_value * 1.08
+    scatter_axis.scatter(banzhaf_flat, shapley_flat, s=16, alpha=0.35, color="tab:cyan")
+    scatter_axis.plot([0, axis_limit], [0, axis_limit], color="black", linestyle="--", linewidth=1)
+    scatter_axis.set_xlim(0, axis_limit)
+    scatter_axis.set_ylim(0, axis_limit)
+    scatter_axis.set_aspect("equal", adjustable="box")
+    scatter_axis.set_xlabel("Banzhaf label")
+    scatter_axis.set_ylabel("Shapley--Shubik label")
+    scatter_axis.set_title(f"Label Relationship (r={correlation:.3f})")
+    scatter_axis.grid(True, alpha=0.25)
+
+    diff_axis.hist(per_game_difference, bins=min(24, max(6, per_game_difference.size // 8)), color="tab:brown", edgecolor="white")
+    diff_axis.set_xlabel("Mean absolute label difference per game")
+    diff_axis.set_ylabel("Games")
+    diff_axis.set_title("How Different Are The Indices?")
+    diff_axis.grid(True, axis="y", alpha=0.25)
+
+    fig.suptitle("Banzhaf vs Shapley--Shubik Labels", y=1.01)
     fig.tight_layout()
     fig.savefig(output_path)
     plt.close(fig)
