@@ -1,101 +1,105 @@
 # InfluenceNet Mini
 
-Educational power-index prediction for cooperative games, with a focus on
-rule-based **Marginal Contribution Networks (MCNs)**.
+InfluenceNet Mini is an educational implementation for predicting Banzhaf and
+Shapley-Shubik style influence in cooperative games. Its main workflow uses
+rule-based **Marginal Contribution Networks (MCNs)**; the earlier weighted-
+voting workflow remains available for comparison.
 
-The project can generate cooperative games, compute Banzhaf and
-Shapley--Shubik style labels, train from-scratch and scikit-learn regressors,
-and compare exact versus predicted influence scores. The older weighted-voting
-workflow is still available, but MCNs are the main path.
+The project generates games, calculates exact or Monte Carlo labels, trains
+from-scratch and scikit-learn regressors, and saves reproducible metrics and
+figures. It is inspired by Kempinski and Kachman's 2025 InfluenceNet paper, but
+it is an independent teaching implementation rather than the authors' official
+code or a full reproduction of their experiments.
 
-The MCN implementation follows the representation described in
-[InfluenceNet AI Models for Banzhaf and Shapley Value Prediction](InfluenceNet%20AI%20Models%20for%20Banzhaf%20and%20Shapley%20Value%20Prediction.pdf).
+## What the project includes
 
-## Contents
+- paper-inspired MCN rule and value generators;
+- exact Banzhaf and Shapley-Shubik style labels for small games;
+- vectorized Monte Carlo labels for larger MCNs;
+- a from-scratch NumPy MLP, Random Forest, and Extra Trees;
+- matching scikit-learn baselines;
+- seeded train/test splits, metrics, prediction tables, and plots;
+- an older weighted-voting experiment and sampling demo.
 
-- [What This Project Does](#what-this-project-does)
-- [Quickstart](#quickstart)
-- [Beginner Concepts](#beginner-concepts)
-- [MCN Rule Tensor](#mcn-rule-tensor)
-- [Power Indices](#power-indices)
-- [How The Code Works](#how-the-code-works)
-- [Run MCN Experiments](#run-mcn-experiments)
-- [Run Weighted-Voting Experiments](#run-weighted-voting-experiments)
-- [Visual Guide](#visual-guide)
-- [Generated Artifacts](#generated-artifacts)
-- [Python API Examples](#python-api-examples)
-- [Project Structure](#project-structure)
-- [Reproducibility And Limits](#reproducibility-and-limits)
-- [Troubleshooting](#troubleshooting)
+## Core idea in one minute
 
-## What This Project Does
+An **agent** is one participant in a cooperative game, and a **coalition** is a
+subset of agents acting together. An MCN gives a coalition its value through
+rules such as:
 
-The central question is:
+```text
+{a and b}      -> 3
+{a and not c}  -> 1
+{b and not c}  -> 2
+```
 
-> Given a cooperative game, how much influence does each agent have?
+The coalition `{a, b}` satisfies all three rules and therefore has value `6`.
+The Banzhaf and Shapley-Shubik measures ask how much each agent changes values
+across coalitions or joining orders. The learning task maps a flattened MCN
+rule tensor to the resulting vector of per-agent influence scores.
 
-This repository can:
-
-- generate random MCN games using paper-style rule generators;
-- compute exact Banzhaf and Shapley--Shubik labels for small MCNs;
-- approximate labels with Monte Carlo sampling for larger MCNs;
-- train NumPy neural networks, from-scratch tree ensembles, and scikit-learn baselines;
-- save comparison metrics, model files, prediction tables, and plots;
-- run the original weighted-voting experiments for comparison.
+By default, this project counts the **absolute** change caused by an agent, so
+both activating and breaking a rule count as influence. Each target vector is
+then normalized to sum to one. This convention is important when comparing the
+results with signed cooperative-game implementations; the API also supports
+signed, unnormalized values.
 
 ## Quickstart
 
-### 1. Install
-
-Requirements:
-
-- Python 3.9 or newer;
-- Git, if you are cloning the repository;
-- a terminal.
+Requirements: Python 3.9 or newer, Git, and a terminal.
 
 ```bash
 git clone https://github.com/mohammad-kawach/power-index-learning.git
 cd power-index-learning
 
-python3 --version
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
+
+python -m unittest discover -s tests -v
 ```
 
-If `python3 --version` prints Python 3.8 or older, install Python 3.9+ and
-replace `python3` in the commands above with the newer executable, such as
-`python3.9`.
-
-On Windows PowerShell:
+On Windows PowerShell, create and activate the environment with:
 
 ```powershell
-py -3 --version
 py -3 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-```
-
-If `py -3 --version` selects Python 3.8 or older, use a newer launcher target
-instead, such as `py -3.9`.
-
-If PowerShell blocks activation, run:
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\.venv\Scripts\Activate.ps1
-```
-
-### 2. Verify
-
-```bash
-python -c "import numpy, pandas, matplotlib, sklearn; print('environment ready')"
 python -m unittest discover -s tests -v
 ```
 
-### 3. Generate A Small MCN Dataset
+If PowerShell blocks activation, see
+[troubleshooting](docs/troubleshooting.md).
+
+## Reproducing the Reported Results
+
+This is the canonical experiment that produced the MCN dataset and the
+committed training, evaluation, and example figures. It creates exact labels,
+compares six predictors on both indices, and evaluates all models on dataset
+example 0.
+
+| Setting | Canonical value |
+| --- | --- |
+| Games | 500 total: 400 train, 100 test |
+| Agents | 6 |
+| Rules per game | 12 |
+| Flattened input width | 156 features |
+| Rule generator / values | `uniform` / `uniform` |
+| Label calculation | exact, absolute marginal changes, normalized per game |
+| Monte Carlo samples | **0 used**; not applicable to exact labels |
+| Dataset and split seed | 42 |
+| NumPy MLP | 20 epochs, batch size 256, 512-256-128 hidden layers |
+| scikit-learn MLP | at most 50 iterations with early stopping |
+| Trees | 5 per Random Forest or Extra Trees ensemble |
+| Test metric | element-wise mean absolute error (MAE) |
+
+The CLI's default `--monte-carlo-samples 10000` value is stored in dataset
+metadata but is ignored when `--label-method exact` is selected. No sampling
+contributes to the reported labels or MAE values.
+
+Run these commands from the repository root with `.venv` activated:
 
 ```bash
 python generate_data.py \
@@ -108,258 +112,140 @@ python generate_data.py \
   --label-method exact \
   --seed 42 \
   --output data/mcn_games.npz
-```
 
-This creates a compressed NumPy archive containing:
-
-```text
-rules
-banzhaf_targets
-shapley_targets
-metadata such as num_agents, num_rules, seed, and generators
-```
-
-### 4. Train
-
-```bash
 python train_models.py \
   --data data/mcn_games.npz \
   --game-type mcn \
   --epochs 20 \
   --sklearn-max-iter 50 \
   --n-estimators 5
-```
 
-### 5. Predict One Example
-
-```bash
 python predict.py \
   --game-type mcn \
   --data data/mcn_games.npz \
   --example-index 0
 ```
 
-Important: MCN prediction uses the same input width as training. Keep
-`num_agents` and `num_rules` unchanged between dataset generation, training,
-and prediction.
+The final command produces the committed `example_mcn_*` rule, exact-power,
+prediction, and error figures. The training command produces the remaining
+`mcn_*` dataset and model figures. Generated CSV reports are ignored by Git, so
+the exact numerical leaderboard is preserved here. Lower MAE is better.
 
-## Beginner Concepts
+| Model | Implementation | Banzhaf MAE | Shapley-Shubik MAE |
+| --- | --- | ---: | ---: |
+| Random Forest | from scratch | **0.039821** | 0.048048 |
+| Extra Trees | from scratch | 0.039865 | **0.046667** |
+| Random Forest | scikit-learn | 0.043160 | 0.051812 |
+| Extra Trees | scikit-learn | 0.053382 | 0.062097 |
+| MLP | scikit-learn | 0.070466 | 0.073790 |
+| MLP | from scratch | 0.137822 | 0.136022 |
 
-### Agents
+These numbers were reproduced on 16 July 2026 with:
 
-An **agent** is one participant in a cooperative game. In political voting, an
-agent could be a party. In a company, an agent could be a board member. In a
-network, an agent could be a node.
-
-### Coalitions
-
-A **coalition** is a group of agents working together. With agents `a`, `b`,
-and `c`, the possible coalitions are:
-
-```text
-{}
-{a}
-{b}
-{c}
-{a, b}
-{a, c}
-{b, c}
-{a, b, c}
-```
-
-With `n` agents there are `2^n` possible coalitions, so exact calculation gets
-expensive quickly.
-
-### Weighted Voting
-
-The older workflow represents a game as:
-
-```text
-[quota; weight_0, weight_1, ..., weight_n]
-```
-
-A coalition wins when its total weight is at least the quota.
-
-### Marginal Contribution Networks
-
-An MCN uses rules instead of only weights and a quota:
-
-```text
-if these agents are present
-and these other agents are absent
-then add this rule value to the coalition
-```
-
-That makes MCNs more expressive than simple weighted voting games. They can
-represent positive interactions, exclusions, and local rule patterns.
-
-## MCN Rule Tensor
-
-One MCN dataset is stored as a real 3D tensor:
-
-```text
-rules.shape == (num_games, num_rules, 2 * num_agents + 1)
-```
-
-For example, with 8 agents and 20 rules:
-
-```text
-rules.shape == (num_games, 20, 17)
-```
-
-The last dimension has 17 columns because it stores:
-
-```text
-8 required-agent flags + 8 banned-agent flags + 1 rule value
-```
-
-Each rule has three parts:
-
-| Part | Meaning |
+| Environment | Recorded value |
 | --- | --- |
-| `req_*` | agents that must be in the coalition |
-| `ban_*` | agents that must not be in the coalition |
-| `value` | score added when the rule is satisfied |
+| Hardware | 14-core Apple M3 Max, 36 GB memory |
+| OS | macOS 26.3.1, arm64 |
+| Python | 3.9.6 |
+| NumPy / Pandas | 2.0.2 / 2.3.3 |
+| Matplotlib / scikit-learn | 3.9.4 / 1.6.1 |
+| Dataset generation | 1.76 seconds |
+| Training, evaluation, and plots | 20.24 seconds |
+| Example prediction and plots | 2.08 seconds |
+| Total wall time | 24.08 seconds |
 
-Example with agents `a=0`, `b=1`, and `c=2`:
+This is a small deterministic educational benchmark, not the paper's full
+experimental protocol. See [experiments](docs/experiments.md) for the complete
+configuration, interpretation, alternative commands, and limitations.
 
-```text
-{a and b}      -> 3
-{a and not c} -> 1
-{b and not c} -> 2
-```
-
-| Rule | req_0 | req_1 | req_2 | ban_0 | ban_1 | ban_2 | value |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 0 | 1 | 1 | 0 | 0 | 0 | 0 | 3 |
-| 1 | 1 | 0 | 0 | 0 | 0 | 1 | 1 |
-| 2 | 0 | 1 | 0 | 0 | 0 | 1 | 2 |
-
-Coalition values:
-
-| Coalition | Satisfied rules | Value |
-| --- | --- | ---: |
-| `{a}` | `{a and not c}` | 1 |
-| `{b}` | `{b and not c}` | 2 |
-| `{a, b}` | all three rules | 6 |
-| `{a, c}` | none | 0 |
-
-The visual guide below includes a generated heatmap that shows this same
-structure for one full MCN example.
-
-## Power Indices
-
-Power indices measure how important each agent is.
-
-### Banzhaf
-
-Banzhaf asks:
-
-> How often does this agent change the value of a coalition?
-
-For MCNs, the default label follows the paper's unsigned rule-change idea: an
-agent receives influence when adding it either activates a rule or breaks a
-rule. Breaking a rule matters because banned agents can remove value from a
-coalition.
-
-### Shapley--Shubik
-
-Shapley--Shubik asks:
-
-> If agents join one at a time in random order, how much does each agent
-> contribute when it joins?
-
-The project can compute this exactly for small MCNs or approximate it with
-Monte Carlo sampling for larger ones.
-
-## How The Code Works
+## Workflow
 
 ```mermaid
 flowchart LR
-    A[Random MCN rules] --> B[3D rule tensor]
-    B --> C[Exact or Monte Carlo labels]
-    B --> D[Flattened model input]
-    C --> E[Seeded train/test split]
+    A["Random MCN rules"] --> B["3D rule tensor"]
+    B --> C["Exact or Monte Carlo labels"]
+    B --> D["Flattened model input"]
+    C --> E["Seeded train/test split"]
     D --> E
-    E --> F[NumPy MLP]
-    E --> G[Scratch forests]
-    E --> H[scikit-learn baselines]
-    F --> I[Metrics and plots]
+    E --> F["NumPy MLP"]
+    E --> G["Scratch forests"]
+    E --> H["scikit-learn baselines"]
+    F --> I["Metrics and plots"]
     G --> I
     H --> I
 ```
 
-The dataset, validation, exact labels, Monte Carlo labels, and prediction
-example use the rule-based MCN representation. The rule tensor is flattened only
-at the final model-input step because the current regressors expect 2D feature
-matrices.
-
-### Rule Generators
-
-| Option | Meaning |
-| --- | --- |
-| `uniform` | sample required and banned flags from uniform random values |
-| `coin_flip` | choose agents by repeated coin-like assignments |
-| `gaussian_mixture` | sample rule patterns from per-rule Gaussian distributions |
-
-Use them with:
-
-```bash
-python generate_data.py --game-type mcn --rule-generator uniform
-python generate_data.py --game-type mcn --rule-generator coin_flip
-python generate_data.py --game-type mcn --rule-generator gaussian_mixture
-```
-
-### Rule Value Generators
-
-| Option | Meaning |
-| --- | --- |
-| `uniform` | every rule has value `1` |
-| `low_variance` | rule values are close to each other |
-| `high_variance` | rule values vary much more strongly |
-
-Use them with:
-
-```bash
-python generate_data.py --game-type mcn --value-generator uniform
-python generate_data.py --game-type mcn --value-generator low_variance
-python generate_data.py --game-type mcn --value-generator high_variance
-```
-
-### Models
-
-For MCNs, the NumPy MLP uses:
+An MCN dataset has shape:
 
 ```text
-input -> 512 -> 256 -> 128 -> output
+(num_games, num_rules, 2 * num_agents + 1)
 ```
 
-The project also trains:
+Each rule stores required-agent flags, banned-agent flags, and one value. For
+the canonical run the shape is `(500, 12, 13)`, which becomes 156 input
+features after flattening. See [MCN format](docs/mcn-format.md) for the full
+schema and generator definitions.
 
-- from-scratch Random Forest;
-- from-scratch Extra Trees;
-- scikit-learn MLP;
-- scikit-learn Random Forest;
-- scikit-learn Extra Trees.
+Exact labels enumerate every predecessor coalition and are best for small
+games. For larger games, `--label-method monte_carlo` samples coalitions and
+joining orders instead. Sampling is faster at large agent counts but introduces
+seed-controlled approximation error.
 
-## Run MCN Experiments
+The training script compares the same six model families for each target:
 
-### Exact Labels For Small Games
+| Model family | Implementations | Role |
+| --- | --- | --- |
+| MLP | NumPy from scratch and scikit-learn | Learns a dense nonlinear mapping from flattened rules to all agent scores |
+| Random Forest | from scratch and scikit-learn | Averages bootstrapped regression trees |
+| Extra Trees | from scratch and scikit-learn | Averages more randomized regression trees |
 
-```bash
-python generate_data.py \
-  --game-type mcn \
-  --num-games 500 \
-  --num-agents 6 \
-  --num-rules 12 \
-  --label-method exact \
-  --output data/mcn_games.npz
+## Results at a glance
+
+![MCN model MAE comparison](results/mcn_model_mae_comparison.png)
+
+The tree ensembles perform best on this small benchmark. The chart is generated
+from the same metrics reported in the table above.
+
+![MCN Banzhaf predicted versus exact](results/mcn_banzhaf_prediction_scatter.png)
+
+Each point is one agent in one held-out game; the dashed diagonal represents a
+perfect prediction.
+
+![Example MCN rule heatmap](results/example_mcn_rules.png)
+
+Blue cells are required agents, red cells are banned agents, neutral cells are
+unused agents, and the green bars show rule values.
+
+The remaining dataset, training, per-agent, and single-example figures are
+explained in [experiments](docs/experiments.md#reading-the-figures).
+
+## Generated outputs
+
+The canonical commands create the following main artifacts:
+
+```text
+data/mcn_games.npz                  # rule tensor, labels, and metadata
+models/mcn_<index>_*.npz or *.pkl   # fitted model artifacts
+results/mcn_model_metrics.csv       # exact test leaderboard
+results/mcn_*_history.csv           # NumPy MLP epoch histories
+results/mcn_*.png                   # dataset and test diagnostics
+results/example_mcn_*.csv           # example predictions and errors
+results/example_mcn_*.png           # example rule/prediction figures
 ```
 
-### Monte Carlo Labels For Larger Games
+The datasets, models, and CSV reports are intentionally ignored by Git because
+they are reproducible and may be large. PNG documentation figures are
+versioned. MCN models have a fixed input width, so prediction must use the same
+`num_agents` and `num_rules` values used during training.
 
-Exact labels scale exponentially with the number of agents. For larger examples,
-sample labels instead:
+The MAE table compares every predicted agent score with its exact target across
+the 100 held-out games. Per-agent charts reveal positional bias that a single
+average can hide; scatter plots show calibration against the diagonal; training
+curves distinguish optimization progress from held-out error.
+
+## Other workflows
+
+For a larger sampled MCN dataset, use Monte Carlo labels explicitly:
 
 ```bash
 python generate_data.py \
@@ -371,43 +257,11 @@ python generate_data.py \
   --value-generator high_variance \
   --label-method monte_carlo \
   --monte-carlo-samples 10000 \
+  --seed 42 \
   --output data/mcn_games.npz
 ```
 
-For a faster local trial, reduce `--num-games` and `--monte-carlo-samples`.
-
-### Train One Or Both Targets
-
-```bash
-python train_models.py --data data/mcn_games.npz --game-type mcn
-python train_models.py --data data/mcn_games.npz --game-type mcn --indices banzhaf
-python train_models.py --data data/mcn_games.npz --game-type mcn --indices shapley
-```
-
-### Predict From A Dataset Example
-
-```bash
-python predict.py \
-  --game-type mcn \
-  --data data/mcn_games.npz \
-  --example-index 0
-```
-
-### Predict From A Fresh MCN With The Trained Shape
-
-```bash
-python predict.py \
-  --game-type mcn \
-  --num-agents 6 \
-  --num-rules 12 \
-  --rule-generator uniform \
-  --value-generator uniform \
-  --seed 123
-```
-
-## Run Weighted-Voting Experiments
-
-Generate weighted-voting data:
+For the older weighted-voting path, generate a CSV and train with:
 
 ```bash
 python generate_data.py \
@@ -416,11 +270,7 @@ python generate_data.py \
   --num-agents 8 \
   --seed 42 \
   --output data/voting_games.csv
-```
 
-Train weighted-voting models:
-
-```bash
 python train_models.py \
   --data data/voting_games.csv \
   --game-type weighted \
@@ -429,333 +279,66 @@ python train_models.py \
   --n-estimators 40
 ```
 
-Predict one weighted game:
+The [experiments guide](docs/experiments.md) also covers single-index training,
+fresh-game prediction, weighted-game prediction, and the Monte Carlo confidence
+interval demo.
 
-```bash
-python predict.py \
-  --game-type weighted \
-  --weights 4 2 7 1 5 3 6 2 \
-  --quota 16
-```
+## Documentation
 
-Run the weighted-game Monte Carlo demo:
-
-```bash
-python monte_carlo_demo.py \
-  --weights 4 2 7 1 5 3 6 2 \
-  --quota 16 \
-  --samples 10000 \
-  --seed 42
-```
-
-## Visual Guide
-
-These plots are saved in `results/`. Together they show what the MCN data looks
-like, how the labels behave, how the models perform, and what happens on one
-concrete example game.
-
-### MCN Rule Complexity
-
-![MCN rule complexity summary](results/mcn_rule_complexity.png)
-
-This chart explains the generated rule dataset before any model is trained. The
-first three panels show how many agents are required, banned, or mentioned at
-all in each rule. The final panel shows the rule-value distribution. With the
-default `uniform` value generator, all rule values are `1`, so the value
-histogram correctly collapses into one spike.
-
-### Agent Role Frequency
-
-![MCN agent role frequency](results/mcn_agent_role_frequency.png)
-
-This chart checks whether the generator treats agents evenly. Each group of
-bars shows how often an agent is required, banned, or unused across all rules.
-For a symmetric generator, the bars should be broadly similar across agents.
-
-### Target Distribution
-
-![MCN target distribution](results/mcn_target_distribution.png)
-
-This chart shows the training labels. The histogram shows all normalized
-agent-game target values, while the right panel shows each agent's average
-label and standard deviation. It helps reveal whether the dataset is balanced
-or dominated by a few high-power agents.
-
-### Banzhaf Versus Shapley Labels
-
-![MCN Banzhaf versus Shapley label relationship](results/mcn_index_relationship.png)
-
-This plot compares the two target definitions directly. Points near the dashed
-line mean Banzhaf and Shapley--Shubik assign similar power to the same
-agent-game pair. The histogram shows how different the two label vectors are
-inside each game.
-
-### Model MAE Comparison
-
-![MCN model MAE comparison](results/mcn_model_mae_comparison.png)
-
-This is the model leaderboard. Each bar is a test mean absolute error, so lower
-is better. It compares the NumPy MLP, scratch tree ensembles, and scikit-learn
-baselines for both Banzhaf and Shapley--Shubik targets.
-
-### Banzhaf Prediction Scatter
-
-![MCN Banzhaf predicted versus exact scatter](results/mcn_banzhaf_prediction_scatter.png)
-
-Each point is one predicted Banzhaf value for one agent in one test game. The
-dashed diagonal is perfect prediction. Points tightly clustered around that
-line mean the model is matching the exact labels well.
-
-### Banzhaf Per-Agent Error
-
-![MCN Banzhaf per-agent MAE](results/mcn_banzhaf_per_agent_mae.png)
-
-This chart breaks Banzhaf error down by agent. It helps catch cases where a
-model has a good average score but consistently misses one particular agent
-position.
-
-### Banzhaf Training Curve
-
-![MCN Banzhaf NumPy MLP training curve](results/mcn_banzhaf_numpy_mlp_training.png)
-
-This chart follows the NumPy MLP during Banzhaf training. The loss line shows
-optimization progress on the training set, while the test MAE line shows
-whether that progress generalizes.
-
-### Shapley Prediction Scatter
-
-![MCN Shapley predicted versus exact scatter](results/mcn_shapley_prediction_scatter.png)
-
-This is the same scatter diagnostic for Shapley--Shubik labels. Shapley labels
-come from ordered marginal contributions, so this plot checks whether models
-learn that second target as well as they learn Banzhaf.
-
-### Shapley Per-Agent Error
-
-![MCN Shapley per-agent MAE](results/mcn_shapley_per_agent_mae.png)
-
-This chart shows Shapley--Shubik error by agent. It is useful for spotting
-agent-specific bias that may be hidden in the overall MAE leaderboard.
-
-### Shapley Training Curve
-
-![MCN Shapley NumPy MLP training curve](results/mcn_shapley_numpy_mlp_training.png)
-
-This chart tracks the NumPy MLP while it learns Shapley--Shubik targets. A
-healthy run usually shows training loss falling without test MAE exploding.
-
-### Example MCN Rule Heatmap
-
-![Example MCN rule heatmap](results/example_mcn_rules.png)
-
-This plot shows one concrete MCN rule matrix. Blue cells are required agents,
-red cells are banned agents, and neutral cells are agents not mentioned by that
-rule. The green side bars show each rule's value.
-
-### Example MCN Exact Power
-
-![Example MCN exact Banzhaf and Shapley power](results/example_mcn_exact_power.png)
-
-This plot compares exact Banzhaf and Shapley--Shubik power on the same example
-MCN. Differences between the blue and orange bars show where coalition-based
-and order-based marginal contribution views disagree.
-
-### Example Banzhaf Prediction
-
-![Example MCN Banzhaf exact versus predicted](results/example_mcn_banzhaf_comparison.png)
-
-This chart compares exact Banzhaf power against every trained predictor for
-one example game. It is easier to inspect than the full scatter plot because it
-shows the predictions agent by agent.
-
-### Example Banzhaf Error
-
-![Example MCN Banzhaf absolute errors](results/example_mcn_banzhaf_errors.png)
-
-This chart shows the absolute Banzhaf prediction error for each agent in the
-example game. Shorter bars mean the model was closer to the exact value.
-
-### Example Shapley Prediction
-
-![Example MCN Shapley exact versus predicted](results/example_mcn_shapley_comparison.png)
-
-This is the same single-game comparison for Shapley--Shubik power. It shows
-whether the trained models preserve the exact Shapley ranking of agents.
-
-### Example Shapley Error
-
-![Example MCN Shapley absolute errors](results/example_mcn_shapley_errors.png)
-
-This chart shows the absolute Shapley--Shubik prediction error per agent for
-the example game. It makes the largest misses visible immediately.
-
-### Weighted-Game Exact Power
-
-![Exact Banzhaf and Shapley--Shubik power for a weighted example](results/exact_power_indices.png)
-
-This plot belongs to the older weighted-voting workflow. It shows exact
-Banzhaf and Shapley--Shubik scores for one weighted game, giving a simple
-baseline before moving to MCNs.
-
-### Weighted Monte Carlo Uncertainty
-
-![Monte Carlo Banzhaf confidence intervals](results/monte_carlo_confidence_intervals.png)
-
-This chart shows Monte Carlo Banzhaf estimates with confidence intervals for
-the weighted-game demo. It explains the uncertainty introduced when the project
-uses sampling instead of exact enumeration.
-
-## Generated Artifacts
-
-Generated datasets and models can become large. The `.gitignore` excludes
-generated data, model binaries, CSV reports, and text reports. PNG figures in
-`results/` are intentionally versioned so the README can display them.
-
-### MCN Data
-
-```text
-data/mcn_games.npz
-```
-
-The archive contains a 3D `rules` tensor, normalized Banzhaf targets,
-normalized Shapley targets, and dataset metadata.
-
-### MCN Models
-
-```text
-models/mcn_banzhaf_numpy_mlp.npz
-models/mcn_banzhaf_scratch_random_forest.pkl
-models/mcn_banzhaf_scratch_extra_trees.pkl
-models/mcn_banzhaf_sklearn_mlp.pkl
-models/mcn_banzhaf_sklearn_random_forest.pkl
-models/mcn_banzhaf_sklearn_extra_trees.pkl
-models/mcn_shapley_numpy_mlp.npz
-models/mcn_shapley_scratch_random_forest.pkl
-models/mcn_shapley_scratch_extra_trees.pkl
-models/mcn_shapley_sklearn_mlp.pkl
-models/mcn_shapley_sklearn_random_forest.pkl
-models/mcn_shapley_sklearn_extra_trees.pkl
-```
-
-### MCN Reports And Images
-
-```text
-results/mcn_model_metrics.csv
-results/mcn_rule_complexity.png
-results/mcn_agent_role_frequency.png
-results/mcn_target_distribution.png
-results/mcn_index_relationship.png
-results/mcn_model_mae_comparison.png
-results/mcn_banzhaf_prediction_scatter.png
-results/mcn_banzhaf_per_agent_mae.png
-results/mcn_banzhaf_numpy_mlp_training.png
-results/mcn_shapley_prediction_scatter.png
-results/mcn_shapley_per_agent_mae.png
-results/mcn_shapley_numpy_mlp_training.png
-results/example_mcn_rules.png
-results/example_mcn_exact_power.png
-results/example_mcn_banzhaf_comparison.png
-results/example_mcn_banzhaf_errors.png
-results/example_mcn_shapley_comparison.png
-results/example_mcn_shapley_errors.png
-```
-
-## Python API Examples
-
-### Evaluate One MCN By Hand
-
-```python
-import numpy as np
-
-from src.mcn import coalition_value, exact_power_indices
-
-rules = np.array([
-    [1, 1, 0, 0, 0, 0, 3],
-    [1, 0, 0, 0, 0, 1, 1],
-    [0, 1, 0, 0, 0, 1, 2],
-], dtype=float)
-
-print(coalition_value([1, 0, 0], rules))  # {a} -> 1
-print(coalition_value([0, 1, 0], rules))  # {b} -> 2
-print(coalition_value([1, 1, 0], rules))  # {a, b} -> 6
-
-result = exact_power_indices(rules)
-print(result.banzhaf)
-print(result.shapley)
-```
-
-### Generate One Random MCN Rule Matrix
-
-```python
-import numpy as np
-
-from src.mcn import generate_random_rules
-
-rng = np.random.default_rng(42)
-rules = generate_random_rules(
-    num_rules=20,
-    num_agents=8,
-    rng=rng,
-    rule_generator="uniform",
-    value_generator="low_variance",
-    p=0.5,
-)
-
-print(rules.shape)  # (20, 17)
-```
-
-### Approximate MCN Labels With Monte Carlo
-
-```python
-from src.mcn import monte_carlo_power_indices
-
-result = monte_carlo_power_indices(
-    rules,
-    num_samples=10000,
-    seed=42,
-)
-
-print(result.banzhaf)
-print(result.shapley)
-```
-
-## Project Structure
-
-| Path | Responsibility |
+| Page | Contents |
 | --- | --- |
-| `src/mcn.py` | MCN rule tensors, coalition values, exact labels, Monte Carlo labels, random MCN generation |
-| `src/banzhaf.py` | weighted-voting exact indices and weighted-game Monte Carlo Banzhaf |
-| `src/features.py` | weighted-game feature engineering and MCN tensor flattening |
-| `src/nn.py` | from-scratch NumPy MLP |
-| `src/trees.py` | from-scratch Random Forest and Extra Trees regressors |
-| `src/scaler.py` | from-scratch standard scaling |
-| `src/plots.py` | headless Matplotlib charts, including MCN rule heatmaps |
-| `generate_data.py` | CLI for weighted CSV or MCN `.npz` dataset generation |
-| `train_models.py` | model training, metrics, and plots |
-| `predict.py` | exact-versus-predicted comparison for one weighted or MCN game |
-| `monte_carlo_demo.py` | weighted-game Monte Carlo confidence interval demo |
-| `tests/` | unit tests for weighted games, MCN rules, features, and sampling |
+| [Concepts](docs/concepts.md) | Agents, coalitions, MCNs, power indices, and label conventions |
+| [MCN format](docs/mcn-format.md) | Rule tensor, generators, archive keys, and shape compatibility |
+| [Experiments](docs/experiments.md) | Canonical benchmark, environment, figures, variants, and artifacts |
+| [Python API](docs/api.md) | Direct function examples and source layout |
+| [Troubleshooting](docs/troubleshooting.md) | Installation, performance, plotting, and reproducibility fixes |
 
-## Reproducibility And Limits
+## Project structure
 
-- Seeds control dataset generation, sampling, train/test splitting, and model initialization.
-- Exact MCN labels grow exponentially with agent count.
-- Monte Carlo labels trade exactness for speed.
-- MCN output labels are normalized influence distributions by default.
-- The MCN default uses unsigned marginal changes, matching the paper's fulfilled-or-broken rule influence idea.
-- The NumPy MLP is educational and readable, not optimized like PyTorch or JAX.
-- scikit-learn baselines can produce tiny differences across package versions.
-- A model trained on one MCN shape cannot predict a different MCN shape.
+```text
+power-index-learning/
+├── src/                  # MCN, index, model, feature, scaler, and plot code
+├── tests/                # unit tests
+├── docs/                 # long-form documentation
+├── results/              # versioned figures; generated CSVs are ignored
+├── generate_data.py      # dataset CLI
+├── train_models.py       # training/evaluation CLI
+├── predict.py            # one-game prediction CLI
+├── monte_carlo_demo.py   # weighted-game sampling demo
+├── requirements.txt      # exact top-level dependency versions
+├── CITATION.cff          # software and preferred paper citation
+└── LICENSE               # MIT licence for project code and original docs
+```
 
-## Troubleshooting
+## Academic attribution
 
-| Problem | Fix |
-| --- | --- |
-| `python: command not found` | Activate `.venv`; on Linux/macOS before activation, use `python3` |
-| `No module named numpy` | Run `python -m pip install -r requirements.txt` inside the virtual environment |
-| `data/mcn_games.npz not found` | Run the MCN `generate_data.py` command first |
-| missing `mcn_*.npz` or `mcn_*.pkl` models | Run `train_models.py --data data/mcn_games.npz --game-type mcn` |
-| prediction feature-count error | Use the same `num_agents` and `num_rules` used for training |
-| exact generation is slow | Reduce `num_agents`, reduce `num_games`, or use `--label-method monte_carlo` |
-| plots fail on a server | Plotting uses Matplotlib's headless `Agg` backend, so no display server is required |
-| PowerShell blocks activation | Run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`, then activate again |
+The MCN representation, the required/banned rule example, the three rule-
+generation families, the three rule-value families, the power-index prediction
+task, and the 512-256-128 neural-network layout are adapted from:
+
+> Benjamin Kempinski and Tal Kachman. “InfluenceNet: AI Models for Banzhaf and
+> Shapley Value Prediction.” In *Intelligent Systems and Applications*
+> (IntelliSys 2025), Lecture Notes in Networks and Systems, vol. 1553,
+> pp. 1–23. Springer Nature Switzerland, 2025.
+> [doi:10.1007/978-3-031-99958-1_1](https://doi.org/10.1007/978-3-031-99958-1_1)
+
+The publication is also included locally as
+[InfluenceNet AI Models for Banzhaf and Shapley Value Prediction.pdf](InfluenceNet%20AI%20Models%20for%20Banzhaf%20and%20Shapley%20Value%20Prediction.pdf).
+
+This repository's exact enumeration, vectorized Monte Carlo implementation,
+explicit absolute/normalization options, NumPy training code, scratch tree
+ensembles, scikit-learn comparisons, command-line workflow, archive format,
+tests, plots, and weighted-voting path are its own educational implementation
+and modifications. The numerical parameters used for the low- and high-
+variance generators are also repository-specific choices.
+
+## Licence and citation
+
+Project code and original repository documentation are available under the
+[MIT License](LICENSE). The included paper is third-party material and is not
+covered by that licence; see [Third-Party Material](THIRD_PARTY_NOTICES.md).
+
+If you use the repository, GitHub can generate a citation from
+[`CITATION.cff`](CITATION.cff). Its preferred citation is the InfluenceNet paper
+above, while the software metadata identifies Mohammad Kawash as the repository
+author.

@@ -1,0 +1,37 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below."
+title: "InfluenceNet Mini"
+type: software
+authors:
+  - family-names: Kawash
+    given-names: Mohammad
+repository-code: "https://github.com/mohammad-kawach/power-index-learning"
+license: MIT
+keywords:
+  - cooperative game theory
+  - Banzhaf power index
+  - Shapley-Shubik power index
+  - marginal contribution networks
+  - machine learning
+abstract: >-
+  An educational implementation for generating Marginal Contribution Network
+  games, calculating Banzhaf and Shapley-Shubik style influence labels, and
+  comparing from-scratch and scikit-learn predictors.
+preferred-citation:
+  type: conference-paper
+  authors:
+    - family-names: Kempinski
+      given-names: Benjamin
+    - family-names: Kachman
+      given-names: Tal
+  title: "InfluenceNet: AI Models for Banzhaf and Shapley Value Prediction"
+  collection-title: "Intelligent Systems and Applications"
+  conference:
+    name: "Intelligent Systems Conference (IntelliSys 2025)"
+  year: 2025
+  publisher:
+    name: "Springer Nature Switzerland"
+  volume: 1553
+  start: 1
+  end: 23
+  doi: "10.1007/978-3-031-99958-1_1"
