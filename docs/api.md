@@ -66,6 +66,23 @@ print(result.banzhaf)
 print(result.shapley)
 ```
 
+## Build MCN model features
+
+```python
+from src.features import create_features_for_one_mcn
+
+raw = create_features_for_one_mcn(rules, feature_set="raw")
+augmented = create_features_for_one_mcn(rules, feature_set="augmented")
+
+print(raw.shape)
+print(augmented.shape)
+```
+
+`raw` is the flattened rule tensor. `augmented` keeps that tensor and appends
+per-agent role/value summaries plus global rule-complexity statistics. The
+training CLI defaults to `augmented`; pass `--mcn-feature-set raw` to reproduce
+older raw-input benchmarks.
+
 ## Use signed contributions
 
 The project defaults to normalized absolute changes. Standard signed marginal
@@ -85,7 +102,7 @@ signed = exact_power_indices(
 | --- | --- |
 | `src/mcn.py` | MCN tensors, coalition values, labels, sampling, and generation |
 | `src/banzhaf.py` | Weighted-voting exact indices and Monte Carlo Banzhaf |
-| `src/features.py` | Weighted features and MCN tensor flattening |
+| `src/features.py` | Weighted features, MCN tensor flattening, and MCN aggregate features |
 | `src/nn.py` | From-scratch NumPy MLP |
 | `src/trees.py` | From-scratch Random Forest and Extra Trees regressors |
 | `src/scaler.py` | From-scratch standard scaling |

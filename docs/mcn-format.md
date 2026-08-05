@@ -62,6 +62,29 @@ The compressed `.npz` archive contains:
 | `label_method` | `exact` or `monte_carlo` |
 | `monte_carlo_samples`, `monte_carlo_batch_size` | sampling settings |
 
+## Model feature sets
+
+Training supports two MCN feature representations:
+
+| Option | Contents |
+| --- | --- |
+| `raw` | Only the flattened rule tensor, with width `num_rules * (2 * num_agents + 1)` |
+| `augmented` | The raw tensor plus deterministic MCN aggregate features |
+
+The aggregate block contains seven per-agent summaries and sixteen global rule
+statistics:
+
+```text
+aggregate_width = 7 * num_agents + 16
+augmented_width = raw_width + aggregate_width
+```
+
+For the canonical 6-agent, 12-rule shape, `raw_width` is `156` and
+`augmented_width` is `214`. The per-agent summaries cover required, banned,
+and mentioned frequencies, role-specific value shares, total role value share,
+and signed role value share. The global statistics summarize rule values and
+required/banned/mentioned rule complexity.
+
 ## Rule generators
 
 The three generator families are adapted from the InfluenceNet paper:
@@ -122,7 +145,8 @@ sampled trial, reduce both `--num-games` and `--monte-carlo-samples`.
 
 ## Shape compatibility
 
-The model input width is `num_rules * (2 * num_agents + 1)`. A saved model can
-therefore predict only MCNs with the same agent and rule counts used during its
-training. The prediction command checks this and reports a feature-count error
-for incompatible shapes.
+The model input width depends on both the tensor shape and the feature set. A
+saved model can therefore predict only MCNs with the same agent count, rule
+count, and compatible feature representation used during training. The
+prediction command defaults to `--mcn-feature-set auto`, which selects `raw` or
+`augmented` by matching the saved model width when possible.

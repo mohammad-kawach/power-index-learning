@@ -85,7 +85,7 @@ example 0.
 | Games | 500 total: 400 train, 100 test |
 | Agents | 6 |
 | Rules per game | 12 |
-| Flattened input width | 156 features |
+| Feature set / input width | `raw` / 156 features |
 | Rule generator / values | `uniform` / `uniform` |
 | Label calculation | exact, absolute marginal changes, normalized per game |
 | Monte Carlo samples | **0 used**; not applicable to exact labels |
@@ -116,6 +116,7 @@ python generate_data.py \
 python train_models.py \
   --data data/mcn_games.npz \
   --game-type mcn \
+  --mcn-feature-set raw \
   --epochs 20 \
   --sklearn-max-iter 50 \
   --n-estimators 5
@@ -158,14 +159,68 @@ This is a small deterministic educational benchmark, not the paper's full
 experimental protocol. See [experiments](docs/experiments.md) for the complete
 configuration, interpretation, alternative commands, and limitations.
 
+## Improving the Results
+
+The preserved benchmark above is intentionally small. For stronger local
+results, train on more exact games, use the default augmented MCN features, and
+tune tree ensembles on a validation split before reading the final test MAE:
+
+```bash
+python generate_data.py \
+  --game-type mcn \
+  --num-games 5000 \
+  --num-agents 6 \
+  --num-rules 12 \
+  --rule-generator uniform \
+  --value-generator uniform \
+  --label-method exact \
+  --seed 42 \
+  --output data/mcn_games_5k.npz
+
+python train_models.py \
+  --data data/mcn_games_5k.npz \
+  --game-type mcn \
+  --mcn-feature-set augmented \
+  --validation-size 0.2 \
+  --tune-ensembles \
+  --tuning-estimators 20 \
+  --skip-scratch-ensembles \
+  --epochs 100 \
+  --sklearn-max-iter 300 \
+  --n-estimators 100 \
+  --models-dir models/mcn_5k \
+  --results-dir results/mcn_5k
+```
+
+A local run of this command on 5 August 2026 produced best test MAE values of
+`0.030696` for Banzhaf and `0.039740` for Shapley-Shubik, both from
+scikit-learn Extra Trees. The full local CSV is written to
+`results/mcn_5k/mcn_model_metrics.csv`.
+
+For broader, more paper-like stress tests, vary both rule and value families
+instead of optimizing only on the simple all-ones value setting:
+
+```bash
+python generate_data.py \
+  --game-type mcn \
+  --num-games 5000 \
+  --num-agents 6 \
+  --num-rules 12 \
+  --rule-generator gaussian_mixture \
+  --value-generator high_variance \
+  --label-method exact \
+  --seed 42 \
+  --output data/mcn_games_gaussian_highvar_5k.npz
+```
+
 ## Workflow
 
 ```mermaid
 flowchart LR
     A["Random MCN rules"] --> B["3D rule tensor"]
     B --> C["Exact or Monte Carlo labels"]
-    B --> D["Flattened model input"]
-    C --> E["Seeded train/test split"]
+    B --> D["Raw or augmented model input"]
+    C --> E["Seeded train/validation/test split"]
     D --> E
     E --> F["NumPy MLP"]
     E --> G["Scratch forests"]
@@ -182,9 +237,10 @@ An MCN dataset has shape:
 ```
 
 Each rule stores required-agent flags, banned-agent flags, and one value. For
-the canonical run the shape is `(500, 12, 13)`, which becomes 156 input
-features after flattening. See [MCN format](docs/mcn-format.md) for the full
-schema and generator definitions.
+the canonical run the shape is `(500, 12, 13)`, which is 156 features in
+`raw` mode. The default `augmented` feature set keeps those raw features and
+adds 58 MCN-aware aggregate features for this shape, for 214 total inputs. See
+[MCN format](docs/mcn-format.md) for the full schema and generator definitions.
 
 Exact labels enumerate every predecessor coalition and are best for small
 games. For larger games, `--label-method monte_carlo` samples coalitions and
@@ -195,7 +251,7 @@ The training script compares the same six model families for each target:
 
 | Model family | Implementations | Role |
 | --- | --- | --- |
-| MLP | NumPy from scratch and scikit-learn | Learns a dense nonlinear mapping from flattened rules to all agent scores |
+| MLP | NumPy from scratch and scikit-learn | Learns a dense nonlinear mapping from MCN features to all agent scores |
 | Random Forest | from scratch and scikit-learn | Averages bootstrapped regression trees |
 | Extra Trees | from scratch and scikit-learn | Averages more randomized regression trees |
 
@@ -226,7 +282,7 @@ The canonical commands create the following main artifacts:
 ```text
 data/mcn_games.npz                  # rule tensor, labels, and metadata
 models/mcn_<index>_*.npz or *.pkl   # fitted model artifacts
-results/mcn_model_metrics.csv       # exact test leaderboard
+results/mcn_model_metrics.csv       # validation/test leaderboard
 results/mcn_*_history.csv           # NumPy MLP epoch histories
 results/mcn_*.png                   # dataset and test diagnostics
 results/example_mcn_*.csv           # example predictions and errors
@@ -236,7 +292,9 @@ results/example_mcn_*.png           # example rule/prediction figures
 The datasets, models, and CSV reports are intentionally ignored by Git because
 they are reproducible and may be large. PNG documentation figures are
 versioned. MCN models have a fixed input width, so prediction must use the same
-`num_agents` and `num_rules` values used during training.
+`num_agents`, `num_rules`, and feature set used during training. `predict.py`
+defaults to `--mcn-feature-set auto`, which matches the saved model width when
+possible.
 
 The MAE table compares every predicted agent score with its exact target across
 the 100 held-out games. Per-agent charts reveal positional bias that a single

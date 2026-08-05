@@ -8,7 +8,12 @@ import numpy as np
 import pandas as pd
 
 from src.banzhaf import exact_power_indices
-from src.features import clean_prediction, create_features_for_one_game, create_features_for_one_mcn
+from src.features import (
+    MCN_FEATURE_SETS,
+    clean_prediction,
+    create_features_for_one_game,
+    create_features_for_one_mcn,
+)
 from src.mcn import (
     exact_power_indices as exact_mcn_power_indices,
     generate_random_rules,
@@ -42,6 +47,12 @@ def parse_args():
     parser.add_argument("--example-index", type=int, default=0)
     parser.add_argument("--num-agents", type=int, default=8)
     parser.add_argument("--num-rules", type=int, default=20)
+    parser.add_argument(
+        "--mcn-feature-set",
+        choices=("auto", *MCN_FEATURE_SETS),
+        default="auto",
+        help="MCN feature representation. Auto matches the saved model width.",
+    )
     parser.add_argument("--rule-generator", choices=("uniform", "coin_flip", "gaussian_mixture"), default="uniform")
     parser.add_argument("--value-generator", choices=("uniform", "low_variance", "high_variance"), default="uniform")
     parser.add_argument("--p", type=float, default=0.5)
@@ -56,30 +67,64 @@ def _artifact_prefix(game_type, index_name):
     return index_name if game_type == "weighted" else f"{game_type}_{index_name}"
 
 
-def _load_predictions(index_name, features, models_dir, game_type):
+def _select_mcn_features(rules, expected_width, requested_feature_set):
+    if requested_feature_set != "auto":
+        return create_features_for_one_mcn(rules, feature_set=requested_feature_set), requested_feature_set
+
+    candidates = {
+        feature_set: create_features_for_one_mcn(rules, feature_set=feature_set)
+        for feature_set in MCN_FEATURE_SETS
+    }
+    for feature_set in ("augmented", "raw"):
+        if candidates[feature_set].shape[0] == expected_width:
+            return candidates[feature_set], feature_set
+    return candidates["augmented"], "augmented"
+
+
+def _load_predictions(index_name, feature_source, models_dir, game_type, mcn_feature_set="auto"):
     prefix = _artifact_prefix(game_type, index_name)
     mlp_path = os.path.join(models_dir, f"{prefix}_numpy_mlp.npz")
-    required = [mlp_path] + [os.path.join(models_dir, f"{prefix}_{suffix}") for suffix in MODEL_SUFFIXES.values()]
-    missing = [path for path in required if not os.path.exists(path)]
-    if missing:
+    if not os.path.exists(mlp_path):
         raise FileNotFoundError(
-            "Missing model files; run train_models.py first:\n" + "\n".join(f"- {path}" for path in missing)
+            "Missing NumPy MLP model file; run train_models.py first:\n"
+            f"- {mlp_path}"
         )
 
     mlp, mean, std = NumpyMLP.load(mlp_path)
+    if game_type == "mcn":
+        features, resolved_feature_set = _select_mcn_features(
+            feature_source,
+            mean.shape[0],
+            mcn_feature_set,
+        )
+    else:
+        features = feature_source
+        resolved_feature_set = None
     if features.shape[0] != mean.shape[0]:
         raise ValueError(
             f"example has {features.shape[0]} features, but the model expects {mean.shape[0]}. "
-            "Use the same game type, agent count, and MCN rule count used for training."
+            "Use the same game type, agent count, MCN rule count, and feature set used for training."
         )
     predictions = {
         "Scratch MLP": clean_prediction(mlp.predict(np.array([(features - mean) / std]))[0])
     }
     for label, suffix in MODEL_SUFFIXES.items():
         path = os.path.join(models_dir, f"{prefix}_{suffix}")
+        if not os.path.exists(path):
+            continue
         with open(path, "rb") as handle:
             artifact = pickle.load(handle)
         if label.startswith("sklearn"):
+            artifact_feature_set = artifact.get("mcn_feature_set")
+            if (
+                game_type == "mcn"
+                and artifact_feature_set is not None
+                and artifact_feature_set != resolved_feature_set
+            ):
+                raise ValueError(
+                    f"{path} was trained with mcn_feature_set={artifact_feature_set!r}, "
+                    f"but predictions are using {resolved_feature_set!r}."
+                )
             model = artifact["model"]
             model_features = (features - mean) / std if artifact["scaled"] else features
         else:
@@ -113,16 +158,15 @@ def _prepare_mcn_example(args):
             num_coins=args.num_coins,
         )
     result = exact_mcn_power_indices(rules)
-    features = create_features_for_one_mcn(rules)
     exact_indices = {"banzhaf": result.banzhaf, "shapley": result.shapley}
-    return features, exact_indices, _mcn_rule_table(rules)
+    return rules, exact_indices, _mcn_rule_table(rules)
 
 
 def main(args=None):
     args = parse_args() if args is None else args
     os.makedirs(args.results_dir, exist_ok=True)
     if args.game_type == "mcn":
-        features, exact_indices, rule_table = _prepare_mcn_example(args)
+        feature_source, exact_indices, rule_table = _prepare_mcn_example(args)
         rule_table_path = os.path.join(args.results_dir, "example_mcn_rules.csv")
         rule_chart_path = os.path.join(args.results_dir, "example_mcn_rules.png")
         exact_power_chart_path = os.path.join(args.results_dir, "example_mcn_exact_power.png")
@@ -144,7 +188,7 @@ def main(args=None):
         weights = np.asarray(args.weights, dtype=float)
         if weights.size < 2:
             raise ValueError("provide at least two weights")
-        features = create_features_for_one_game(weights, args.quota)
+        feature_source = create_features_for_one_game(weights, args.quota)
         exact_banzhaf, exact_shapley = exact_power_indices(weights, args.quota)
         exact_indices = {"banzhaf": exact_banzhaf, "shapley": exact_shapley}
         agent_count = weights.size
@@ -152,7 +196,13 @@ def main(args=None):
 
     for index_name in args.indices:
         exact = exact_indices[index_name]
-        predictions = _load_predictions(index_name, features, args.models_dir, args.game_type)
+        predictions = _load_predictions(
+            index_name,
+            feature_source,
+            args.models_dir,
+            args.game_type,
+            args.mcn_feature_set,
+        )
         table_data = {"Agent": [f"Agent {i}" for i in range(agent_count)], "Exact": exact}
         table_data.update(predictions)
         table = pd.DataFrame(table_data)

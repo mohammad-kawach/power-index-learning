@@ -6,10 +6,11 @@
 | Python is older than 3.9 | Install Python 3.9 or newer and recreate `.venv` with that executable |
 | `No module named numpy` or `sklearn` | Activate `.venv`, then run `python -m pip install -r requirements.txt` |
 | `data/mcn_games.npz not found` | Run the MCN `generate_data.py` command first |
-| Missing `mcn_*.npz` or `mcn_*.pkl` models | Run `train_models.py --data data/mcn_games.npz --game-type mcn` |
-| Prediction feature-count error | Use the same `num_agents` and `num_rules` used for training |
+| Missing NumPy MLP model | Run `train_models.py --data data/mcn_games.npz --game-type mcn`; optional `.pkl` ensemble files are skipped by `predict.py` when absent |
+| Prediction feature-count error | Use the same `num_agents`, `num_rules`, and MCN feature set used for training; leave `predict.py --mcn-feature-set auto` unless you need to force `raw` or `augmented` |
 | Exact generation is slow | Reduce `num_agents` or `num_games`, or use `--label-method monte_carlo` |
 | A Monte Carlo run is slow | Reduce `--monte-carlo-samples` for a trial run |
+| Ensemble tuning is slow | Lower `--tuning-estimators`; use `--skip-scratch-ensembles` for larger runs; add `--tune-scratch-ensembles` only on small datasets or when runtime is acceptable |
 | A result differs slightly on another machine | Confirm the pinned requirements, Python version, command arguments, seed, and label convention |
 | Plots fail on a server | The project selects Matplotlib's headless `Agg` backend; ensure Matplotlib can write its cache directory |
 | PowerShell blocks activation | Run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`, then activate again |

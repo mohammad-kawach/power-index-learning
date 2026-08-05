@@ -2,7 +2,11 @@ import unittest
 
 import numpy as np
 
-from src.features import create_features_for_one_mcn, create_mcn_feature_matrix
+from src.features import (
+    create_features_for_one_mcn,
+    create_mcn_aggregate_features,
+    create_mcn_feature_matrix,
+)
 from src.mcn import (
     coalition_value,
     exact_power_indices,
@@ -71,8 +75,17 @@ class MarginalContributionNetworkTests(unittest.TestCase):
 
         self.assertEqual(dataset["rules"].shape, (5, 4, 7))
         self.assertEqual(dataset["banzhaf_targets"].shape, (5, 3))
-        self.assertEqual(create_mcn_feature_matrix(dataset["rules"]).shape, (5, 28))
-        self.assertEqual(create_features_for_one_mcn(dataset["rules"][0]).shape, (28,))
+        self.assertEqual(
+            create_mcn_feature_matrix(dataset["rules"], feature_set="raw").shape,
+            (5, 28),
+        )
+        self.assertEqual(
+            create_features_for_one_mcn(dataset["rules"][0], feature_set="raw").shape,
+            (28,),
+        )
+        self.assertEqual(create_mcn_aggregate_features(dataset["rules"][0]).shape, (37,))
+        self.assertEqual(create_mcn_feature_matrix(dataset["rules"]).shape, (5, 65))
+        self.assertEqual(create_features_for_one_mcn(dataset["rules"][0]).shape, (65,))
 
     def test_rejects_invalid_rule_generator(self):
         rng = np.random.default_rng(1)

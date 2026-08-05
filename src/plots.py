@@ -49,7 +49,12 @@ def save_prediction_chart(
     plt.close()
 
 
-def save_loss_curve(history, output_path, title="Neural Network Training Curve"):
+def save_loss_curve(
+    history,
+    output_path,
+    title="Neural Network Training Curve",
+    metric_label="Evaluation MAE",
+):
     _ensure_output_dir(output_path)
     epochs = history[:, 0]
 
@@ -57,11 +62,11 @@ def save_loss_curve(history, output_path, title="Neural Network Training Curve")
     mae_axis = loss_axis.twinx()
 
     loss_line = loss_axis.plot(epochs, history[:, 1], color="tab:blue", label="Training Loss")
-    mae_line = mae_axis.plot(epochs, history[:, 2], color="tab:orange", label="Test MAE")
+    mae_line = mae_axis.plot(epochs, history[:, 2], color="tab:orange", label=metric_label)
 
     loss_axis.set_xlabel("Epoch")
     loss_axis.set_ylabel("Training Loss", color="tab:blue")
-    mae_axis.set_ylabel("Test MAE", color="tab:orange")
+    mae_axis.set_ylabel(metric_label, color="tab:orange")
     loss_axis.tick_params(axis="y", labelcolor="tab:blue")
     mae_axis.tick_params(axis="y", labelcolor="tab:orange")
     loss_axis.set_title(title)

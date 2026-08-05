@@ -12,6 +12,7 @@ laptop before a presentation.
 | --- | --- |
 | Games / train / test | 500 / 400 / 100 |
 | Agents / rules / input features | 6 / 12 / 156 |
+| Feature set | `raw` flattened MCN tensor |
 | Rule/value generators | `uniform` / `uniform` |
 | Labels | exact, absolute marginal changes, normalized per game |
 | Monte Carlo samples | 0 used; the stored CLI default of 10,000 is ignored for exact labels |
@@ -38,6 +39,7 @@ python generate_data.py \
 python train_models.py \
   --data data/mcn_games.npz \
   --game-type mcn \
+  --mcn-feature-set raw \
   --epochs 20 \
   --sklearn-max-iter 50 \
   --n-estimators 5
@@ -64,6 +66,83 @@ These values were reproduced on 16 July 2026. Lower is better.
 This is a deterministic educational benchmark on one small synthetic dataset,
 not a reproduction of the paper's full experimental protocol and not evidence
 of general state-of-the-art performance.
+
+## Recommended higher-accuracy run
+
+For better local results than the presentation-sized benchmark, increase the
+number of exact games, use the default augmented MCN features, reserve
+validation data, and tune scikit-learn tree ensembles on that validation split:
+
+```bash
+python generate_data.py \
+  --game-type mcn \
+  --num-games 5000 \
+  --num-agents 6 \
+  --num-rules 12 \
+  --rule-generator uniform \
+  --value-generator uniform \
+  --label-method exact \
+  --seed 42 \
+  --output data/mcn_games_5k.npz
+
+python train_models.py \
+  --data data/mcn_games_5k.npz \
+  --game-type mcn \
+  --mcn-feature-set augmented \
+  --validation-size 0.2 \
+  --tune-ensembles \
+  --tuning-estimators 20 \
+  --skip-scratch-ensembles \
+  --epochs 100 \
+  --sklearn-max-iter 300 \
+  --n-estimators 100 \
+  --models-dir models/mcn_5k \
+  --results-dir results/mcn_5k
+```
+
+`--tune-ensembles` searches Random Forest and Extra Trees depth, leaf size, and
+feature subsampling choices for the scikit-learn models. `--tuning-estimators`
+keeps the search cheaper; the selected final models still use `--n-estimators`.
+The command skips the from-scratch tree ensembles because they are useful for
+teaching but slow on larger datasets. Remove `--skip-scratch-ensembles`, and add
+`--tune-scratch-ensembles` only for small datasets or when runtime is not a
+concern.
+The final CSV includes `validation_mae`, `test_mae`, `feature_set`, and the
+selected parameters.
+
+### Higher-accuracy run results
+
+The command above was run in this workspace on 5 August 2026. Lower is better.
+
+| Index | Model | Validation MAE | Test MAE | Selected parameters |
+| --- | --- | ---: | ---: | --- |
+| Banzhaf | sklearn Extra Trees | 0.030991 | **0.030696** | `max_depth=13, max_features=1.0, min_samples_leaf=4` |
+| Banzhaf | sklearn Random Forest | 0.031211 | 0.031064 | `max_depth=14, max_features=1.0, min_samples_leaf=4` |
+| Banzhaf | Scratch MLP | 0.040087 | 0.039249 | |
+| Banzhaf | sklearn MLP | 0.047003 | 0.046315 | |
+| Shapley-Shubik | sklearn Extra Trees | 0.039272 | **0.039740** | `max_depth=11, max_features=1.0, min_samples_leaf=4` |
+| Shapley-Shubik | sklearn Random Forest | 0.039221 | 0.039907 | `max_depth=12, max_features=1.0, min_samples_leaf=2` |
+| Shapley-Shubik | Scratch MLP | 0.046514 | 0.046130 | |
+| Shapley-Shubik | sklearn MLP | 0.054568 | 0.054376 | |
+
+This run intentionally skipped the from-scratch Random Forest and Extra Trees
+models to keep the larger benchmark practical.
+
+To test generalization beyond the all-ones value setting, repeat the workflow
+with different generators:
+
+```bash
+python generate_data.py \
+  --game-type mcn \
+  --num-games 5000 \
+  --num-agents 6 \
+  --num-rules 12 \
+  --rule-generator gaussian_mixture \
+  --value-generator high_variance \
+  --label-method exact \
+  --seed 42 \
+  --output data/mcn_games_gaussian_highvar_5k.npz
+```
 
 ### Environment and runtime
 
@@ -133,6 +212,7 @@ Train both targets or select one:
 python train_models.py --data data/mcn_games.npz --game-type mcn
 python train_models.py --data data/mcn_games.npz --game-type mcn --indices banzhaf
 python train_models.py --data data/mcn_games.npz --game-type mcn --indices shapley
+python train_models.py --data data/mcn_games.npz --game-type mcn --mcn-feature-set raw
 ```
 
 Predict a saved dataset example:
@@ -214,11 +294,14 @@ models/mcn_<index>_sklearn_<model>.pkl
 
 - Seeds control generation, sampling, splitting, NumPy initialization, and the
   scikit-learn estimators.
+- The historical presentation table used `--mcn-feature-set raw`; the current
+  training default is `augmented`.
 - Exact MCN calculation grows exponentially with the number of agents.
 - Monte Carlo labels add sampling error in exchange for scalability.
 - Output labels are normalized influence distributions by default.
 - The default unsigned marginal change counts both fulfilled and broken rules.
-- A model trained on one MCN tensor shape cannot predict another shape.
+- A model trained on one MCN tensor shape and feature set cannot predict another
+  shape or incompatible feature set.
 - The NumPy MLP and scratch forests prioritize readability over speed.
 - Low-level numerical libraries and parallel scheduling can still cause tiny
   cross-platform differences despite pinned top-level packages.

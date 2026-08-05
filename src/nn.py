@@ -122,7 +122,17 @@ class NumpyMLP:
             return 2 * (predictions - y) / predictions.size
         raise ValueError("unsupported output_activation/loss combination")
 
-    def train(self, X_train, y_train, X_test, y_test, epochs=800, batch_size=256, print_every=50):
+    def train(
+        self,
+        X_train,
+        y_train,
+        X_eval,
+        y_eval,
+        epochs=800,
+        batch_size=256,
+        print_every=50,
+        evaluation_label="Evaluation MAE",
+    ):
         history = []
         n = len(X_train)
         rng = np.random.default_rng(123)
@@ -161,13 +171,16 @@ class NumpyMLP:
                 self._adam_update(grad_weights, grad_biases)
 
             train_pred, _ = self.forward(X_train)
-            test_pred, _ = self.forward(X_test)
+            eval_pred, _ = self.forward(X_eval)
             train_loss = self.loss(train_pred, y_train)
-            test_mae = np.mean(np.abs(test_pred - y_test))
-            history.append((epoch, train_loss, test_mae))
+            eval_mae = np.mean(np.abs(eval_pred - y_eval))
+            history.append((epoch, train_loss, eval_mae))
 
             if epoch == 1 or epoch % print_every == 0:
-                print(f"Epoch {epoch:4d} | Loss: {train_loss:.4f} | Test MAE: {test_mae:.4f}")
+                print(
+                    f"Epoch {epoch:4d} | Loss: {train_loss:.4f} | "
+                    f"{evaluation_label}: {eval_mae:.4f}"
+                )
 
         return np.array(history)
 
@@ -175,7 +188,7 @@ class NumpyMLP:
         predictions, _ = self.forward(X)
         return predictions
 
-    def save(self, path, scaler):
+    def save(self, path, scaler, metadata=None):
         arrays = {
             "num_layers": np.array([len(self.weights)]),
             "hidden_layers": np.asarray(self.hidden_layers, dtype=int),
@@ -186,6 +199,8 @@ class NumpyMLP:
             "mean": scaler.mean_,
             "std": scaler.std_,
         }
+        for key, value in (metadata or {}).items():
+            arrays[f"metadata_{key}"] = np.array([str(value)])
         for index, (weight, bias) in enumerate(zip(self.weights, self.biases)):
             arrays[f"W{index}"] = weight
             arrays[f"b{index}"] = bias

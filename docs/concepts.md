@@ -108,6 +108,16 @@ exact_power_indices(rules, absolute=False, normalize=False) # signed raw values
 Results should therefore state the `absolute` and `normalize` settings when
 they are compared with another implementation or publication.
 
+## Learning features
+
+The dataset always stores the real MCN tensor. Training can then use either the
+raw flattened tensor or an augmented representation. The augmented features do
+not change the game or the labels; they append summaries such as how often each
+agent is required or banned and how much rule value is attached to those roles.
+These signals help tabular MLP and tree regressors learn patterns that are
+obvious in the MCN structure but expensive to rediscover from isolated binary
+columns.
+
 ## Exact and sampled calculation
 
 Exact calculation enumerates all predecessor coalitions and is appropriate for

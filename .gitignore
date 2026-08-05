@@ -12,8 +12,10 @@ data/*.csv
 data/*.npz
 models/*.npz
 models/*.pkl
+models/*/
 results/*.csv
 results/*.txt
+results/*/
 
 # IDE / OS
 .idea/
